@@ -1,0 +1,41 @@
+# Secrets — NEVER commit
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# Anchor / Solana / Rust
+target/
+.anchor/
+test-ledger/
+**/Cargo.lock
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+dist/
+build/
+.turbo/
+*.tsbuildinfo
+next-env.d.ts
+
+# Skill telemetry / superstack metadata
+.superstack/.telemetry-*
+.superstack/manifest.json
+
+# Claude Code user-local settings (per-developer permission overrides)
+.claude/settings.local.json
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

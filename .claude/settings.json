@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code",
+  "mcpServers": {
+    "helius": {
+      "command": "npx",
+      "args": ["-y", "@helius/mcp-server"],
+      "env": {
+        "HELIUS_API_KEY": "${HELIUS_API_KEY}"
+      },
+      "description": "Helius RPC + DAS API + webhooks. Used for indexing pool windows + user positions."
+    }
+  },
+  "permissions": {
+    "allow": [
+      "Bash(anchor build)",
+      "Bash(anchor test*)",
+      "Bash(anchor deploy*)",
+      "Bash(npm install*)",
+      "Bash(npm run*)",
+      "Bash(cargo build*)",
+      "Bash(cargo test*)",
+      "Bash(solana airdrop*)",
+      "Bash(solana balance)",
+      "Bash(solana config get)"
+    ]
+  }
+}

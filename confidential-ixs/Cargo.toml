@@ -1,0 +1,16 @@
+[package]
+name = "tide-confidential"
+version = "0.1.0"
+description = "Tide Arcium MXE — confidential aggregate compute for DCA Pool"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "tide_confidential"
+
+[dependencies]
+# Arcium / Arcis SDK — pin versions when Cohort 2 access granted
+# arcis-sdk = "0.1"
+
+[features]
+default = []

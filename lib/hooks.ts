@@ -12,7 +12,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { useConnection, useWallet } from "@solana/wallet-adapter-react";
+import { useConnection } from "@solana/wallet-adapter-react";
 import { PublicKey } from "@solana/web3.js";
 
 import type { DcaPosition, Pool, Window } from "./types";
@@ -21,6 +21,7 @@ import {
   findPoolPda,
 } from "./anchor-client";
 import { SOL_MINT, USDC_MINT_DEVNET } from "./constants";
+import { useTideWallet } from "./hooks/use-tide-wallet";
 
 /** Fetch the canonical SOL/USDC pool. */
 export function usePool(): {
@@ -49,7 +50,7 @@ export function useUserPosition(): {
   positionPubkey: PublicKey | null;
   loading: boolean;
 } {
-  const { publicKey } = useWallet();
+  const { publicKey } = useTideWallet();
   const { poolPubkey } = usePool();
   const [position, setPosition] = useState<DcaPosition | null>(null);
   const [loading, setLoading] = useState(true);

@@ -21,9 +21,13 @@ import {
 } from "@solana/wallet-adapter-react";
 import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
 import { PrivyProvider } from "@privy-io/react-auth";
+import { toSolanaWalletConnectors } from "@privy-io/react-auth/solana";
 import "@solana/wallet-adapter-react-ui/styles.css";
 
 import { CURRENT_NETWORK, RPC_URLS } from "./constants";
+import { PrivyEmbeddedBridge } from "./privy-bridge";
+
+const solanaConnectors = toSolanaWalletConnectors();
 
 const PRIVY_APP_ID = process.env.NEXT_PUBLIC_PRIVY_APP_ID ?? "";
 
@@ -51,12 +55,16 @@ export function Providers({ children }: { children: ReactNode }) {
           accentColor: "#06b6d4",
         },
         loginMethods: ["email", "google", "twitter", "wallet"],
+        externalWallets: {
+          solana: { connectors: solanaConnectors },
+        },
         embeddedWallets: {
-          createOnLogin: "users-without-wallets",
+          ethereum: { createOnLogin: "off" },
+          solana: { createOnLogin: "users-without-wallets" },
         },
       }}
     >
-      {inner}
+      <PrivyEmbeddedBridge>{inner}</PrivyEmbeddedBridge>
     </PrivyProvider>
   );
 }

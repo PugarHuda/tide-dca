@@ -4,10 +4,23 @@
 
 import { PublicKey } from "@solana/web3.js";
 
-// Program ID — placeholder. Run `anchor keys list` after first build.
-export const TIDE_PROGRAM_ID = new PublicKey(
-  process.env.NEXT_PUBLIC_TIDE_PROGRAM_ID ??
-    "Tide1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+/** Safe PublicKey constructor — falls back to default (all-zero pubkey) on invalid input. */
+function safePubkey(
+  addr: string | undefined,
+  fallback: PublicKey = PublicKey.default,
+): PublicKey {
+  if (!addr) return fallback;
+  try {
+    return new PublicKey(addr);
+  } catch {
+    return fallback;
+  }
+}
+
+// Program ID — placeholder. Run `anchor keys list` after first build,
+// set NEXT_PUBLIC_TIDE_PROGRAM_ID di .env.local dengan real value.
+export const TIDE_PROGRAM_ID = safePubkey(
+  process.env.NEXT_PUBLIC_TIDE_PROGRAM_ID,
 );
 
 // USDC mints

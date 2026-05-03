@@ -46,7 +46,41 @@
 | `cargo test` (confidential-ixs Arcis) | ✅ 3/3 unit tests pass |
 | `anchor build` (Solana program) | ⏳ See note below |
 
-**Note on `anchor build`**: Anchor 0.31 + Solana 2.1 punya known dep conflict (`zeroize` version mismatch). Patched dengan `curve25519-dalek = { git = "https://github.com/anza-xyz/curve25519-dalek" }` di `programs/tide/Cargo.toml`. First build runs `cargo build-sbf` directly via PowerShell session karena anchor wrapper PATH issue.
+**Note on `anchor build`**: Two issues mengharuskan user manual intervention:
+
+1. **Anchor 0.31 + Solana 2.1 dep conflict**: zeroize/curve25519-dalek mismatch. **Fixed** dengan downgrade `anchor-spl` ke 0.30.1 di `programs/tide/Cargo.toml`.
+
+2. **Windows non-admin symlink restriction**: `cargo build-sbf` butuh symlinks untuk install platform-tools, fails dengan `os error 1314 (privilege not held)`. **Solutions** (pilih satu):
+
+   **Option A (recommended)**: Enable Windows Developer Mode
+   ```
+   Settings → System → For developers → Developer Mode: ON
+   ```
+   Restart terminal. Symlinks now allowed without admin.
+
+   **Option B**: Run elevated PowerShell as administrator
+   ```
+   Right-click PowerShell → Run as Administrator
+   cd "F:\Hackathons\Hackathon Frontier\programs\tide"
+   $env:PATH = "C:\Users\ASUS\.local\share\solana\install\active_release\bin;C:\Users\ASUS\.cargo\bin;$env:PATH"
+   cargo build-sbf
+   ```
+
+   **Option C**: Use WSL2 (full Linux environment)
+   ```
+   wsl --install
+   # then run anchor build inside WSL
+   ```
+
+After resolving privilege issue, anchor wrapper PATH issue can be worked around dengan calling `cargo build-sbf` directly:
+```powershell
+cd "F:\Hackathons\Hackathon Frontier\programs\tide"
+$env:PATH = "C:\Users\ASUS\.local\share\solana\install\active_release\bin;C:\Users\ASUS\.cargo\bin;$env:PATH"
+cargo build-sbf
+# then for IDL generation:
+cd ..\..
+anchor.exe build --skip-build
+```
 
 ---
 

@@ -4,10 +4,10 @@ skip-lint = false
 resolution = true
 
 [programs.localnet]
-tide = "Tide1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+tide = "CLMop5kyE4jqnca98eZVrs5nc93HSVdT13xqARtSH2GZ"
 
 [programs.devnet]
-tide = "Tide1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+tide = "CLMop5kyE4jqnca98eZVrs5nc93HSVdT13xqARtSH2GZ"
 
 [registry]
 url = "https://api.apr.dev"

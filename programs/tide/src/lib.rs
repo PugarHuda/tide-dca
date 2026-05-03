@@ -14,7 +14,7 @@ pub mod state;
 
 use instructions::*;
 
-declare_id!("Tide1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx");
+declare_id!("CLMop5kyE4jqnca98eZVrs5nc93HSVdT13xqARtSH2GZ");
 
 #[program]
 pub mod tide {

@@ -45,7 +45,8 @@ export async function encryptIntent(params: IntentParams): Promise<EncryptedInte
   const data = encoder.encode(
     `${params.userPubkey}:${params.windowPubkey}:${params.amount}:${params.maxSlippageBps}`,
   );
-  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  // Cast through unknown — TS 5.7 stricter Uint8Array<ArrayBufferLike> vs BufferSource.
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data as unknown as BufferSource);
   const intentHash = new Uint8Array(hashBuffer);
 
   return {

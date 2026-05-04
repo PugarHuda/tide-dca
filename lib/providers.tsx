@@ -53,6 +53,9 @@ export function Providers({ children }: { children: ReactNode }) {
         appearance: {
           theme: "dark",
           accentColor: "#06b6d4",
+          // Without this Privy defaults to ethereum-only and the connect
+          // modal hides Phantom/Solflare in favor of MetaMask et al.
+          walletChainType: "solana-only",
         },
         loginMethods: ["email", "google", "twitter", "wallet"],
         externalWallets: {

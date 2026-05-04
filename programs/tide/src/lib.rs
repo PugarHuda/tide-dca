@@ -37,6 +37,12 @@ pub mod tide {
         )
     }
 
+    /// Permissionless window creation. Opens a new window for the pool;
+    /// must be called between cycles before users can commit intents.
+    pub fn init_window(ctx: Context<InitWindow>) -> Result<()> {
+        instructions::init_window::handler(ctx)
+    }
+
     /// User sets up recurring DCA position (one per pool per user).
     pub fn setup_dca_position(
         ctx: Context<SetupDcaPosition>,

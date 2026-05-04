@@ -1,18 +1,40 @@
 //! Execute aggregate swap via Jupiter IOC route.
 //!
-//! Called after Arcium MXE returns aggregate result. Performs single
-//! atomic swap of total escrowed USDC → target token.
+//! Called after Arcium MXE returns aggregate result. In production this
+//! performs a single atomic USDC → target_mint swap of the entire window
+//! escrow via Jupiter Swap CPI with IOC (immediate-or-cancel) flag.
 //!
-//! TODO: integrate Jupiter Swap CPI. Currently scaffold validates and
-//! flips status. Real Jupiter CPI requires Jupiter program account list.
+//! NOTE: Jupiter CPI integration is a TODO for the hackathon scope —
+//! the swap itself is stubbed (fills `tokens_acquired` from the
+//! caller-provided `min_acquired_amount`). What we DO own here:
+//! - constraint validation (status must be Aggregating)
+//! - lazily creating the output-token escrow ATA so that downstream
+//!   `claim_allocation` has a deterministic account to read from
+//! - status transition (Aggregating -> Distributed)
+//! - pool stats update
+//!
+//! Production CPI roughly:
+//! ```ignore
+//! let acquired = jupiter_swap_ioc(
+//!     escrow_input_ata,
+//!     escrow_output_ata,
+//!     pool.target_mint,
+//!     window.total_committed_usdc,
+//!     min_acquired_amount,
+//!     jupiter_route_data,
+//! )?;
+//! window.tokens_acquired = acquired;
+//! ```
 
 use anchor_lang::prelude::*;
+use anchor_spl::token::{Mint, Token, TokenAccount};
 
 use crate::error::TideError;
-use crate::state::{Pool, Window};
+use crate::state::{Pool, Window, ESCROW_SEED_PREFIX};
 
 #[derive(Accounts)]
 pub struct ExecuteSwap<'info> {
+    #[account(mut)]
     pub caller: Signer<'info>,
 
     #[account(mut)]
@@ -25,9 +47,35 @@ pub struct ExecuteSwap<'info> {
     )]
     pub window: Account<'info, Window>,
 
-    /// Jupiter program account (placeholder — load with Jupiter swap accounts in production)
-    /// CHECK: jupiter swap CPI integration TBD
+    /// Target token mint (e.g. wrapped SOL).
+    #[account(constraint = target_mint.key() == pool.target_mint)]
+    pub target_mint: Account<'info, Mint>,
+
+    /// CHECK: PDA authority for escrow ATAs (signs transfers in claim_allocation).
+    #[account(
+        seeds = [ESCROW_SEED_PREFIX, window.key().as_ref(), b"authority"],
+        bump,
+    )]
+    pub escrow_authority: AccountInfo<'info>,
+
+    /// Output-token escrow — created lazily here, drained by claim_allocation.
+    #[account(
+        init_if_needed,
+        payer = caller,
+        seeds = [ESCROW_SEED_PREFIX, window.key().as_ref(), b"output"],
+        bump,
+        token::mint = target_mint,
+        token::authority = escrow_authority,
+    )]
+    pub escrow_output_ata: Account<'info, TokenAccount>,
+
+    /// Jupiter program account (placeholder — real CPI loads Jupiter swap accounts list).
+    /// CHECK: Jupiter CPI integration TBD; not dereferenced in stub.
     pub jupiter_program: AccountInfo<'info>,
+
+    pub token_program: Program<'info, Token>,
+    pub system_program: Program<'info, System>,
+    pub rent: Sysvar<'info, Rent>,
 }
 
 pub fn handler(
@@ -40,23 +88,16 @@ pub fn handler(
     require!(window.status == 1, TideError::AggregateNotReady);
     require!(min_acquired_amount > 0, TideError::InvalidAmount);
 
-    // TODO: Jupiter CPI swap execution here
-    // Pseudo-flow:
-    //   let acquired = jupiter_swap_ioc(
-    //     escrow_input_ata,
-    //     pool.target_mint,
-    //     window.total_committed_usdc,
-    //     min_acquired_amount,
-    //     jupiter_route_data,
-    //   )?;
-    //   window.tokens_acquired = acquired;
-
-    // For scaffold — placeholder values
+    // TODO: Jupiter CPI swap execution. See module-level docs for the
+    // production shape. For scaffold the caller asserts the expected
+    // output amount; in production the CPI return value sets this.
     window.tokens_acquired = min_acquired_amount; // STUB
-    window.effective_slippage_bps = 5; // STUB: 0.05% slippage achieved
-    window.status = 2; // Executing -> Distributed
+    window.effective_slippage_bps = 5; // STUB: ~0.05% slippage
 
-    // Update pool stats
+    // Status 2 = Executing complete / output escrow funded; claim_allocation
+    // accepts both 2 and 3 (Distributed) so users can claim immediately.
+    window.status = 2;
+
     let pool = &mut ctx.accounts.pool;
     pool.total_volume_processed = pool
         .total_volume_processed

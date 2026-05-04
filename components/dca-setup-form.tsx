@@ -1,47 +1,54 @@
 "use client";
 
 import { useState } from "react";
+import { useConnection, useWallet } from "@solana/wallet-adapter-react";
+
+import { submitSetupDcaPosition } from "@/lib/tide-actions";
 
 /**
  * DCA setup wizard.
  *
- * Steps:
- * 1. Select target token (SOL default)
- * 2. Set amount per window
- * 3. Set frequency (window duration)
- * 4. Set max slippage tolerance
- * 5. Encrypt intent + commit (calls Anchor program)
+ * Submits a setup_dca_position transaction via raw web3.js (see
+ * lib/tide-actions.ts for the discriminator+borsh encoding rationale).
  *
- * TODO when SDK ready:
- * - Wire to Anchor program via @coral-xyz/anchor
- * - Encrypt intent via @arcium/client
+ * Pre-conditions for on-chain success:
+ * - Pool for (USDC, SOL) must exist (init_pool was called by admin).
+ * - User wallet connected via wallet-adapter (Phantom/Solflare).
+ *   Email-only Privy users see the embedded pubkey but can't sign yet —
+ *   that bridge is a separate follow-up.
+ *
+ * TODO: when target_mint != SOL is supported, pipe `targetToken` through
+ * to the action builder.
  */
-export function DcaSetupForm({
-  onSubmit,
-}: {
-  onSubmit?: (params: {
-    targetToken: string;
-    amountUsdc: number;
-    windowMinutes: number;
-    maxSlippageBps: number;
-  }) => Promise<void>;
-}) {
+export function DcaSetupForm() {
+  const { connection } = useConnection();
+  const wallet = useWallet();
+
   const [targetToken, setTargetToken] = useState("SOL");
   const [amountUsdc, setAmountUsdc] = useState("50");
   const [windowMinutes, setWindowMinutes] = useState("60");
   const [maxSlippagePct, setMaxSlippagePct] = useState("1");
   const [submitting, setSubmitting] = useState(false);
+  const [result, setResult] = useState<
+    | { kind: "idle" }
+    | { kind: "success"; signature: string }
+    | { kind: "error"; message: string }
+  >({ kind: "idle" });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
+    setResult({ kind: "idle" });
     try {
-      await onSubmit?.({
-        targetToken,
-        amountUsdc: parseFloat(amountUsdc),
-        windowMinutes: parseInt(windowMinutes, 10),
+      const out = await submitSetupDcaPosition(connection, wallet, {
+        amountPerWindowUsdc: parseFloat(amountUsdc),
         maxSlippageBps: Math.round(parseFloat(maxSlippagePct) * 100),
       });
+      if (out.ok) {
+        setResult({ kind: "success", signature: out.signature });
+      } else {
+        setResult({ kind: "error", message: out.error });
+      }
     } finally {
       setSubmitting(false);
     }
@@ -153,12 +160,35 @@ export function DcaSetupForm({
         </div>
       </div>
 
+      {result.kind === "success" && (
+        <div className="rounded-md border border-emerald-500/40 bg-emerald-950/30 p-3 text-xs text-emerald-200">
+          ✓ DCA position created.{" "}
+          <a
+            className="underline decoration-dotted underline-offset-2"
+            href={`https://explorer.solana.com/tx/${result.signature}?cluster=devnet`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            View on Solana Explorer
+          </a>
+        </div>
+      )}
+      {result.kind === "error" && (
+        <div className="rounded-md border border-rose-500/40 bg-rose-950/30 p-3 text-xs text-rose-200">
+          ✗ {result.message}
+        </div>
+      )}
+
       <button
         type="submit"
-        disabled={submitting}
+        disabled={submitting || !wallet.publicKey}
         className="w-full rounded-md bg-cyan-500 px-4 py-3 font-medium text-zinc-900 transition hover:bg-cyan-400 disabled:opacity-50"
       >
-        {submitting ? "Encrypting + committing…" : "Start DCA Pool"}
+        {submitting
+          ? "Submitting transaction…"
+          : !wallet.publicKey
+            ? "Connect wallet to continue"
+            : "Start DCA Pool"}
       </button>
 
       <p className="text-center text-xs text-zinc-500">

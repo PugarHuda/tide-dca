@@ -143,3 +143,108 @@ export async function submitCommitIntent(
 export function nextWindowPda(poolPda: PublicKey, currentCounter: bigint) {
   return findWindowPda(poolPda, currentCounter);
 }
+
+// ─── Admin: init_pool ────────────────────────────────────────────────────────
+//
+// One-time call per (input_mint, target_mint) pair. Defaults below match the
+// constants used elsewhere in the app: USDC -> SOL, 1-hour windows, 100 USDC
+// minimum aggregate, 5 bps protocol fee.
+
+export type InitPoolParams = {
+  targetMint?: PublicKey;
+  windowDurationSeconds?: number; // default 3600
+  minPoolSizeUsdc?: number;       // human-readable USDC; default 100
+  feeBps?: number;                // default 5
+};
+
+export async function submitInitPool(
+  connection: Connection,
+  wallet: SignerWallet,
+  params: InitPoolParams = {},
+): Promise<SubmitResult> {
+  if (!wallet.publicKey) return { ok: false, error: "Wallet not connected" };
+  if (!wallet.sendTransaction) return { ok: false, error: "Wallet does not support sendTransaction" };
+
+  const targetMint = params.targetMint ?? SOL_MINT;
+  const windowDurationSeconds = BigInt(params.windowDurationSeconds ?? 3600);
+  const minPoolSizeUsdc = BigInt(Math.round((params.minPoolSizeUsdc ?? 100) * 1_000_000));
+  const feeBps = params.feeBps ?? 5;
+
+  const authority = wallet.publicKey;
+  const [poolPda] = findPoolPda(USDC_MINT, targetMint);
+
+  // Args: target_mint (32) + window_duration (i64, 8) + min_pool_size (u64, 8) + fee_bps (u16, 2)
+  const argBuf = Buffer.alloc(50);
+  targetMint.toBuffer().copy(argBuf, 0);
+  argBuf.writeBigInt64LE(windowDurationSeconds, 32);
+  argBuf.writeBigUInt64LE(minPoolSizeUsdc, 40);
+  argBuf.writeUInt16LE(feeBps, 48);
+
+  const data = Buffer.concat([discriminator("init_pool"), argBuf]);
+
+  const ix = new TransactionInstruction({
+    programId: TIDE_PROGRAM_ID,
+    keys: [
+      { pubkey: authority, isSigner: true, isWritable: true },
+      { pubkey: USDC_MINT, isSigner: false, isWritable: false },
+      { pubkey: poolPda, isSigner: false, isWritable: true },
+      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+    ],
+    data,
+  });
+
+  const tx = new Transaction()
+    .add(ComputeBudgetProgram.setComputeUnitLimit({ units: 200_000 }))
+    .add(ix);
+
+  try {
+    const signature = await wallet.sendTransaction(tx, connection);
+    await connection.confirmTransaction(signature, "confirmed");
+    return { ok: true, signature, poolPda, positionPda: poolPda };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+// ─── Admin/cron: init_window ─────────────────────────────────────────────────
+//
+// Permissionless. Caller must pass the current `windowCounter` so we can
+// derive the next Window PDA — read it from a `usePool()`-fed Pool account.
+
+export async function submitInitWindow(
+  connection: Connection,
+  wallet: SignerWallet,
+  poolPda: PublicKey,
+  currentWindowCounter: bigint,
+): Promise<SubmitResult> {
+  if (!wallet.publicKey) return { ok: false, error: "Wallet not connected" };
+  if (!wallet.sendTransaction) return { ok: false, error: "Wallet does not support sendTransaction" };
+
+  const caller = wallet.publicKey;
+  const [windowPda] = findWindowPda(poolPda, currentWindowCounter);
+
+  const data = discriminator("init_window");
+
+  const ix = new TransactionInstruction({
+    programId: TIDE_PROGRAM_ID,
+    keys: [
+      { pubkey: caller, isSigner: true, isWritable: true },
+      { pubkey: poolPda, isSigner: false, isWritable: true },
+      { pubkey: windowPda, isSigner: false, isWritable: true },
+      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+    ],
+    data,
+  });
+
+  const tx = new Transaction()
+    .add(ComputeBudgetProgram.setComputeUnitLimit({ units: 100_000 }))
+    .add(ix);
+
+  try {
+    const signature = await wallet.sendTransaction(tx, connection);
+    await connection.confirmTransaction(signature, "confirmed");
+    return { ok: true, signature, poolPda, positionPda: windowPda };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}

@@ -8,7 +8,7 @@
  * connection.onAccountChange so the dashboard updates live without polling.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useConnection } from "@solana/wallet-adapter-react";
 import { PublicKey } from "@solana/web3.js";
 
@@ -37,7 +37,10 @@ export function usePool(): {
   const [pool, setPool] = useState<Pool | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const [poolPubkey] = findPoolPda(USDC_MINT, SOL_MINT);
+  // Memoize so the PublicKey reference is stable across renders. Without
+  // this the useEffect below sees a "new" poolPubkey every render and
+  // restarts forever — observable as a permanent "Loading pool…" state.
+  const poolPubkey = useMemo(() => findPoolPda(USDC_MINT, SOL_MINT)[0], []);
 
   useEffect(() => {
     let cancelled = false;

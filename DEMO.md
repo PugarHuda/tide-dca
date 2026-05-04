@@ -4,6 +4,58 @@
 
 ---
 
+## MVP Demo Path — what we can record TODAY (~90s)
+
+The full storyboard below assumes ~5 beta users, real Arcium MXE, and a polished
+landing page. None of those are gated by code anymore — just by deployment +
+external-account wait. This section is the runnable subset for a hackathon
+submission cut **today** off the current `master` branch.
+
+### Hard pre-reqs (one-time, ~15 min)
+
+1. Windows Developer Mode ON (see DEPLOY.md "Build")
+2. `anchor build && anchor deploy --provider.cluster devnet` — see DEPLOY.md
+3. Confirm `solana balance` ≥ 0.5 SOL (post-deploy ~0.3 SOL leftover is plenty)
+4. `npm run dev` open at http://localhost:3000
+
+### Recording script (90 seconds, single take)
+
+| t | beat | action |
+|---|---|---|
+| 0:00 | hook | Title card: "DCA without MEV. Bots blind, retail wins." |
+| 0:08 | problem | "Solana retail loses ~$5M/year to bots sandwiching DCA." (1 sentence over screen recording of jup.ag DCA flow) |
+| 0:18 | nav to /admin | Connect Phantom (devnet). Page shows "No Pool account" empty state. |
+| 0:23 | init_pool | Click **Initialize Pool** → Phantom signs → Solana Explorer link appears. Pool state card now shows authority + counter=0. |
+| 0:35 | init_window | Click **Open Next Window** → signs → Window #0 created, end_ts ~1h ahead. |
+| 0:43 | nav to /setup | Switch to second wallet (Phantom multi-account or Solflare). Fill form: $50, 1h, 1%. Click **Start DCA Pool** → tx confirmed. |
+| 0:58 | nav to /dashboard | Real numbers: Total deposited 0 (no commit_intent UI yet — call out as "next iteration"), position is Active, countdown live. |
+| 1:08 | nav to /admin (back to admin wallet) | Click **Trigger Aggregate** (window may need to be expired in production; for demo we either fast-forward window or note this). |
+| 1:18 | execute_swap | Click **Execute Swap** → Jupiter route fetched → v0 tx with ALT signs → Solana Explorer shows the actual Jupiter CPI hit. |
+| 1:28 | close | "Privacy via Arcium. Aggregate via Jupiter. Distribution via Phantom. Solo founder, 5 weeks, Claude Code." |
+
+### What we DON'T claim in the MVP cut
+
+Be honest in the voiceover — judges respect this:
+
+- **Arcium MPC**: encryption layer is the stub at `lib/arcium.ts`. Real MXE
+  pending Cohort 2 approval. Show the *UX* of encrypted commit but call it
+  "designed for Arcium" not "powered by Arcium today."
+- **commit_intent UI**: there's no user-facing commit page yet — only
+  setup_dca_position. The aggregation demo runs against the pool/window
+  primitives directly via /admin. State this explicitly.
+- **Beta users**: numbers shown are 1 (you). Don't fabricate "247 participants."
+
+### Recording mechanics
+
+- **Two browser profiles** so wallet switches don't require disconnect dance.
+  Profile A = pool authority. Profile B = end user.
+- **Trim ruthlessly** — anything that's not on the script above gets cut.
+  90 seconds buys ~12 distinct beats; we have 10. No room for slack.
+- **Inset terminal** showing tx signatures in `solana confirm <sig>` adds
+  technical legitimacy in 1-2 visible cuts.
+
+---
+
 ## Pre-Recording Checklist
 
 ### Setup

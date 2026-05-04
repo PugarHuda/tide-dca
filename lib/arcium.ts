@@ -29,29 +29,60 @@ export interface IntentParams {
 }
 
 /**
+ * Per-(user, window) nullifier so a single user can't double-commit to the
+ * same window. Deterministic SHA-256 of "user:window" so the on-chain check
+ * sees the same bytes regardless of who computes them.
+ *
+ * Real Arcium SDK will likely expose its own nullifier helper that accepts
+ * extra entropy from the MXE coordinator; this is the API shape we'd
+ * preserve at the Tide-frontend boundary.
+ */
+export async function deriveNullifier(
+  userPubkey: string,
+  windowPubkey: string,
+): Promise<Uint8Array> {
+  const data = new TextEncoder().encode(`tide:nullifier:${userPubkey}:${windowPubkey}`);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data as unknown as BufferSource);
+  return new Uint8Array(hashBuffer);
+}
+
+/**
  * Encrypt a DCA intent for submission to Arcium MXE.
  *
- * STUB IMPLEMENTATION — replace with real Arcium client SDK after Cohort 2 access.
- * Real flow:
- * 1. Generate ephemeral key
- * 2. Split intent into N shares (Shamir Secret Sharing or similar)
- * 3. Encrypt each share with corresponding MXE node's pubkey
- * 4. Send shares to MXE network (off-chain) — this happens server-side or via Arcium client
- * 5. Return on-chain commit hash + visible amount
+ * STUB IMPLEMENTATION — see ARCIUM.md for the exact code change list when
+ * Cohort 2 SDK access lands. Real flow:
+ *   1. Build inputs object {amount, max_slippage_bps}
+ *   2. Call arcium.encryptShares({ function: "aggregate_intents", inputs, nullifier })
+ *   3. Returns commitmentHash (lands on-chain) + shares (off-chain to MXE)
+ *
+ * The stub here returns a deterministic hash so on-chain commit_intent has
+ * 32 bytes to store. It is NOT cryptographically meaningful and the demo
+ * narration must say so explicitly.
  */
 export async function encryptIntent(params: IntentParams): Promise<EncryptedIntent> {
-  // STUB: hash the parameters as placeholder for real encryption
-  const encoder = new TextEncoder();
-  const data = encoder.encode(
-    `${params.userPubkey}:${params.windowPubkey}:${params.amount}:${params.maxSlippageBps}`,
+  // Stub commitment: hash(nullifier || amount || slippage). Same shape the
+  // real SDK returns, but plaintext-derivable so judges can verify the wiring
+  // without the MXE running.
+  const nullifier = await deriveNullifier(params.userPubkey, params.windowPubkey);
+  const amountBuf = new Uint8Array(8);
+  new DataView(amountBuf.buffer).setBigUint64(0, params.amount, true);
+  const slippageBuf = new Uint8Array(2);
+  new DataView(slippageBuf.buffer).setUint16(0, params.maxSlippageBps, true);
+
+  const combined = new Uint8Array(nullifier.length + amountBuf.length + slippageBuf.length);
+  combined.set(nullifier, 0);
+  combined.set(amountBuf, nullifier.length);
+  combined.set(slippageBuf, nullifier.length + amountBuf.length);
+
+  const hashBuffer = await crypto.subtle.digest(
+    "SHA-256",
+    combined as unknown as BufferSource,
   );
-  // Cast through unknown — TS 5.7 stricter Uint8Array<ArrayBufferLike> vs BufferSource.
-  const hashBuffer = await crypto.subtle.digest("SHA-256", data as unknown as BufferSource);
   const intentHash = new Uint8Array(hashBuffer);
 
   return {
     intentHash,
-    encryptedShares: new Uint8Array(0), // TODO: real shares from Arcium SDK
+    encryptedShares: new Uint8Array(0), // real Arcium shares fill this
     visibleAmount: params.amount,
   };
 }

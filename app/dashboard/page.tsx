@@ -1,7 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import type { Route } from "next";
+import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 
 import { SavingsChart } from "@/components/savings-chart";
 import { WindowStatusCard } from "@/components/window-status-card";
@@ -12,16 +14,41 @@ import {
   useUserIntent,
   useUserPosition,
 } from "@/lib/hooks";
+import { submitClaimAllocation } from "@/lib/tide-actions";
 import { calculateSavings, bpsToPct, formatSol, formatUsdc } from "@/lib/utils";
 
 const STANDALONE_SLIPPAGE_BPS_DEFAULT = 50; // assumed retail spot/DCA reference
 
+type ClaimState =
+  | { kind: "idle" }
+  | { kind: "submitting" }
+  | { kind: "success"; signature: string }
+  | { kind: "error"; message: string };
+
 export default function DashboardPage() {
+  const { connection } = useConnection();
+  const wallet = useWallet();
   const { connected } = useTideWallet();
-  const { pool, loading: poolLoading } = usePool();
+  const { pool, poolPubkey, loading: poolLoading } = usePool();
   const { position } = useUserPosition();
   const { window: currentWindow, windowPubkey } = useCurrentWindow();
   const { intent: pendingIntent } = useUserIntent(windowPubkey);
+  const [claimState, setClaimState] = useState<ClaimState>({ kind: "idle" });
+
+  const handleClaim = async () => {
+    if (!windowPubkey || !currentWindow) return;
+    setClaimState({ kind: "submitting" });
+    const result = await submitClaimAllocation(connection, wallet, {
+      poolPda: poolPubkey,
+      windowPda: windowPubkey,
+      windowNumber: currentWindow.windowNumber,
+    });
+    setClaimState(
+      result.ok
+        ? { kind: "success", signature: result.signature }
+        : { kind: "error", message: result.error },
+    );
+  };
 
   if (!connected) {
     return (
@@ -109,17 +136,39 @@ export default function DashboardPage() {
       </section>
 
       {pendingClaim > 0n && (
-        <section className="mb-10 flex items-center justify-between rounded-lg border border-cyan-500/30 bg-cyan-950/20 p-5">
-          <div>
-            <h3 className="font-semibold">Pending allocation</h3>
-            <p className="text-sm text-zinc-400">
-              {formatSol(pendingClaim)} ready to claim from window #
-              {currentWindow?.windowNumber.toString()}
-            </p>
+        <section className="mb-10 rounded-lg border border-cyan-500/30 bg-cyan-950/20 p-5">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <h3 className="font-semibold">Pending allocation</h3>
+              <p className="text-sm text-zinc-400">
+                {formatSol(pendingClaim)} ready to claim from window #
+                {currentWindow?.windowNumber.toString()}
+              </p>
+            </div>
+            <button
+              onClick={() => void handleClaim()}
+              disabled={claimState.kind === "submitting"}
+              className="rounded-md bg-cyan-500 px-4 py-2 font-medium text-zinc-900 transition hover:bg-cyan-400 disabled:opacity-50"
+            >
+              {claimState.kind === "submitting" ? "Claiming…" : "Claim"}
+            </button>
           </div>
-          <button className="rounded-md bg-cyan-500 px-4 py-2 font-medium text-zinc-900 transition hover:bg-cyan-400">
-            Claim
-          </button>
+          {claimState.kind === "success" && (
+            <p className="mt-3 text-xs text-emerald-300">
+              ✓ Claimed.{" "}
+              <a
+                className="underline decoration-dotted underline-offset-2"
+                href={`https://explorer.solana.com/tx/${claimState.signature}?cluster=devnet`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                View on Solana Explorer
+              </a>
+            </p>
+          )}
+          {claimState.kind === "error" && (
+            <p className="mt-3 text-xs text-rose-300">✗ {claimState.message}</p>
+          )}
         </section>
       )}
 

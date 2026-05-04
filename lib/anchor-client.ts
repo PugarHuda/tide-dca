@@ -102,3 +102,18 @@ export function findEscrowAuthorityPda(
     programId,
   );
 }
+
+/**
+ * Output-token escrow ATA (target mint, e.g. wrapped SOL). Created lazily by
+ * execute_swap; drained by claim_allocation. Distinct seed from the
+ * USDC-input escrow which uses just [escrow, window].
+ */
+export function findEscrowOutputAtaPda(
+  window: PublicKey,
+  programId = TIDE_PROGRAM_ID,
+): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from(SEED_ESCROW), window.toBuffer(), Buffer.from("output")],
+    programId,
+  );
+}

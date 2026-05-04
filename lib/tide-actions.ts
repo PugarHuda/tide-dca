@@ -25,13 +25,26 @@ import {
 } from "@solana/web3.js";
 
 import {
+  TOKEN_PROGRAM_ID,
+  createAssociatedTokenAccountIdempotentInstruction,
+  getAssociatedTokenAddressSync,
+} from "@solana/spl-token";
+
+import {
   TIDE_PROGRAM_ID,
   USDC_MINT_DEVNET,
   USDC_MINT_MAINNET,
   CURRENT_NETWORK,
   SOL_MINT,
 } from "./constants";
-import { findDcaPositionPda, findPoolPda, findWindowPda } from "./anchor-client";
+import {
+  findDcaPositionPda,
+  findEscrowAuthorityPda,
+  findEscrowOutputAtaPda,
+  findIntentPda,
+  findPoolPda,
+  findWindowPda,
+} from "./anchor-client";
 
 /** Anchor instruction discriminator: first 8 bytes of sha256("global:<name>"). */
 function discriminator(snakeName: string): Buffer {
@@ -244,6 +257,79 @@ export async function submitInitWindow(
     const signature = await wallet.sendTransaction(tx, connection);
     await connection.confirmTransaction(signature, "confirmed");
     return { ok: true, signature, poolPda, positionPda: windowPda };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+// ─── User: claim_allocation ──────────────────────────────────────────────────
+//
+// Pulls user's pro-rata wrapped-SOL share out of the window's output escrow
+// into their own wSOL ATA. Atomically prepends an idempotent ATA-create so
+// first-time claimers don't fail with "Account does not exist".
+//
+// Caller must already know the Window PDA + window_number — useCurrentWindow()
+// in the dashboard already exposes both.
+
+export type ClaimAllocationParams = {
+  poolPda: PublicKey;
+  windowPda: PublicKey;
+  windowNumber: bigint;
+  /** Target token mint. Defaults to wrapped SOL. */
+  targetMint?: PublicKey;
+};
+
+export async function submitClaimAllocation(
+  connection: Connection,
+  wallet: SignerWallet,
+  params: ClaimAllocationParams,
+): Promise<SubmitResult> {
+  if (!wallet.publicKey) return { ok: false, error: "Wallet not connected" };
+  if (!wallet.sendTransaction) return { ok: false, error: "Wallet does not support sendTransaction" };
+
+  const owner = wallet.publicKey;
+  const targetMint = params.targetMint ?? SOL_MINT;
+
+  const [intentPda] = findIntentPda(params.windowPda, owner);
+  const [positionPda] = findDcaPositionPda(owner, params.poolPda);
+  const [escrowOutputAta] = findEscrowOutputAtaPda(params.windowPda);
+  const [escrowAuthority] = findEscrowAuthorityPda(params.windowPda);
+
+  // User's wrapped-SOL ATA (regular, not PDA — derived deterministically).
+  const ownerOutputAta = getAssociatedTokenAddressSync(targetMint, owner);
+
+  // Prepend idempotent ATA create — no-op if already exists.
+  const createAtaIx = createAssociatedTokenAccountIdempotentInstruction(
+    owner,
+    ownerOutputAta,
+    owner,
+    targetMint,
+  );
+
+  const claimIx = new TransactionInstruction({
+    programId: TIDE_PROGRAM_ID,
+    keys: [
+      { pubkey: owner, isSigner: true, isWritable: true },
+      { pubkey: intentPda, isSigner: false, isWritable: true },
+      { pubkey: params.windowPda, isSigner: false, isWritable: false },
+      { pubkey: positionPda, isSigner: false, isWritable: true },
+      { pubkey: escrowOutputAta, isSigner: false, isWritable: true },
+      { pubkey: escrowAuthority, isSigner: false, isWritable: false },
+      { pubkey: ownerOutputAta, isSigner: false, isWritable: true },
+      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+    ],
+    data: discriminator("claim_allocation"),
+  });
+
+  const tx = new Transaction()
+    .add(ComputeBudgetProgram.setComputeUnitLimit({ units: 200_000 }))
+    .add(createAtaIx)
+    .add(claimIx);
+
+  try {
+    const signature = await wallet.sendTransaction(tx, connection);
+    await connection.confirmTransaction(signature, "confirmed");
+    return { ok: true, signature, poolPda: params.poolPda, positionPda };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }

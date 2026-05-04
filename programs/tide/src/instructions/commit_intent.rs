@@ -7,6 +7,7 @@
 //! 4. Aggregate computation runs at window close (trigger_aggregate)
 
 use anchor_lang::prelude::*;
+use anchor_spl::associated_token::AssociatedToken;
 use anchor_spl::token::{transfer, Mint, Token, TokenAccount, Transfer};
 
 use crate::error::TideError;
@@ -64,25 +65,25 @@ pub struct CommitIntent<'info> {
     )]
     pub owner_input_ata: Account<'info, TokenAccount>,
 
-    /// Pool escrow holds USDC during window.
-    #[account(
-        init_if_needed,
-        payer = owner,
-        seeds = [ESCROW_SEED_PREFIX, window.key().as_ref()],
-        bump,
-        token::mint = input_mint,
-        token::authority = escrow_authority,
-    )]
-    pub escrow_input_ata: Account<'info, TokenAccount>,
-
-    /// CHECK: PDA authority for escrow
+    /// CHECK: PDA authority for escrow ATAs.
     #[account(
         seeds = [ESCROW_SEED_PREFIX, window.key().as_ref(), b"authority"],
         bump,
     )]
     pub escrow_authority: AccountInfo<'info>,
 
+    /// Pool USDC escrow — standard ATA so Jupiter / external programs can
+    /// resolve it via getAssociatedTokenAddress.
+    #[account(
+        init_if_needed,
+        payer = owner,
+        associated_token::mint = input_mint,
+        associated_token::authority = escrow_authority,
+    )]
+    pub escrow_input_ata: Account<'info, TokenAccount>,
+
     pub token_program: Program<'info, Token>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
     pub rent: Sysvar<'info, Rent>,
 }

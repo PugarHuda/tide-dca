@@ -19,12 +19,14 @@ import {
   Connection,
   PublicKey,
   SystemProgram,
+  SYSVAR_RENT_PUBKEY,
   Transaction,
   TransactionInstruction,
   type Signer,
 } from "@solana/web3.js";
 
 import {
+  ASSOCIATED_TOKEN_PROGRAM_ID,
   TOKEN_PROGRAM_ID,
   createAssociatedTokenAccountIdempotentInstruction,
   getAssociatedTokenAddressSync,
@@ -40,11 +42,11 @@ import {
 import {
   findDcaPositionPda,
   findEscrowAuthorityPda,
-  findEscrowOutputAtaPda,
   findIntentPda,
   findPoolPda,
   findWindowPda,
 } from "./anchor-client";
+import { fetchQuote, fetchSwapInstructions } from "./jupiter";
 
 /** Anchor instruction discriminator: first 8 bytes of sha256("global:<name>"). */
 function discriminator(snakeName: string): Buffer {
@@ -292,10 +294,10 @@ export async function submitClaimAllocation(
 
   const [intentPda] = findIntentPda(params.windowPda, owner);
   const [positionPda] = findDcaPositionPda(owner, params.poolPda);
-  const [escrowOutputAta] = findEscrowOutputAtaPda(params.windowPda);
   const [escrowAuthority] = findEscrowAuthorityPda(params.windowPda);
 
-  // User's wrapped-SOL ATA (regular, not PDA — derived deterministically).
+  // Output escrow + user output are both standard ATAs now.
+  const escrowOutputAta = getAssociatedTokenAddressSync(targetMint, escrowAuthority, true);
   const ownerOutputAta = getAssociatedTokenAddressSync(targetMint, owner);
 
   // Prepend idempotent ATA create — no-op if already exists.
@@ -310,6 +312,7 @@ export async function submitClaimAllocation(
     programId: TIDE_PROGRAM_ID,
     keys: [
       { pubkey: owner, isSigner: true, isWritable: true },
+      { pubkey: targetMint, isSigner: false, isWritable: false },
       { pubkey: intentPda, isSigner: false, isWritable: true },
       { pubkey: params.windowPda, isSigner: false, isWritable: false },
       { pubkey: positionPda, isSigner: false, isWritable: true },
@@ -330,6 +333,169 @@ export async function submitClaimAllocation(
     const signature = await wallet.sendTransaction(tx, connection);
     await connection.confirmTransaction(signature, "confirmed");
     return { ok: true, signature, poolPda: params.poolPda, positionPda };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+// ─── Operator: trigger_aggregate ─────────────────────────────────────────────
+//
+// Permissionless. Flips current window from status 0 (Open) to status 1
+// (Aggregating) once the window has expired and the aggregate threshold is
+// met. Required precondition for execute_swap.
+
+export async function submitTriggerAggregate(
+  connection: Connection,
+  wallet: SignerWallet,
+  poolPda: PublicKey,
+  windowPda: PublicKey,
+): Promise<SubmitResult> {
+  if (!wallet.publicKey) return { ok: false, error: "Wallet not connected" };
+  if (!wallet.sendTransaction) return { ok: false, error: "Wallet does not support sendTransaction" };
+
+  const ix = new TransactionInstruction({
+    programId: TIDE_PROGRAM_ID,
+    keys: [
+      { pubkey: wallet.publicKey, isSigner: true, isWritable: false },
+      { pubkey: poolPda, isSigner: false, isWritable: false },
+      { pubkey: windowPda, isSigner: false, isWritable: true },
+    ],
+    data: discriminator("trigger_aggregate"),
+  });
+
+  const tx = new Transaction()
+    .add(ComputeBudgetProgram.setComputeUnitLimit({ units: 50_000 }))
+    .add(ix);
+
+  try {
+    const signature = await wallet.sendTransaction(tx, connection);
+    await connection.confirmTransaction(signature, "confirmed");
+    return { ok: true, signature, poolPda, positionPda: windowPda };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+// ─── Operator: execute_swap (Jupiter CPI passthrough) ───────────────────────
+//
+// Off-chain: fetch a Jupiter swap-instructions response with userPublicKey =
+// escrow_authority and destinationTokenAccount = escrow_output_ata. The
+// returned `swapInstruction` is what we forward as remaining_accounts +
+// jupiter_route_data — Anchor then invoke_signed's it under the
+// escrow_authority PDA.
+//
+// Important: Jupiter routes can pull in many accounts. We pass
+// `onlyDirectRoutes=true` to keep the count low enough to fit in a legacy
+// transaction. A full v0+ALT setup is the next step if direct routes don't
+// have enough liquidity for the aggregate amount.
+
+export type ExecuteSwapParams = {
+  poolPda: PublicKey;
+  windowPda: PublicKey;
+  windowNumber: bigint;
+  totalCommittedUsdc: bigint;
+  /** User-asserted floor for tokens received. */
+  minAcquiredAmount: bigint;
+  /** Slippage tolerance in bps for the Jupiter quote. */
+  slippageBps?: number;
+  targetMint?: PublicKey;
+};
+
+export async function submitExecuteSwap(
+  connection: Connection,
+  wallet: SignerWallet,
+  params: ExecuteSwapParams,
+): Promise<SubmitResult> {
+  if (!wallet.publicKey) return { ok: false, error: "Wallet not connected" };
+  if (!wallet.sendTransaction) return { ok: false, error: "Wallet does not support sendTransaction" };
+
+  const caller = wallet.publicKey;
+  const targetMint = params.targetMint ?? SOL_MINT;
+  const slippageBps = params.slippageBps ?? 50;
+
+  const [escrowAuthority] = findEscrowAuthorityPda(params.windowPda);
+  const escrowInputAta = getAssociatedTokenAddressSync(USDC_MINT, escrowAuthority, true);
+  const escrowOutputAta = getAssociatedTokenAddressSync(targetMint, escrowAuthority, true);
+
+  // 1. Fetch Jupiter quote — ExactIn with escrow's full USDC balance.
+  let quote;
+  try {
+    quote = await fetchQuote({
+      inputMint: USDC_MINT,
+      outputMint: targetMint,
+      amount: params.totalCommittedUsdc,
+      slippageBps,
+      onlyDirectRoutes: true, // keep account count compact for legacy tx
+    });
+  } catch (err) {
+    return {
+      ok: false,
+      error: `Jupiter quote failed: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+
+  // 2. Fetch raw swap instructions; route output to our escrow ATA directly.
+  let jupiterIx;
+  try {
+    const swapResponse = await fetchSwapInstructions(quote, escrowAuthority, {
+      destinationTokenAccount: escrowOutputAta,
+    });
+    jupiterIx = swapResponse.swapInstruction;
+  } catch (err) {
+    return {
+      ok: false,
+      error: `Jupiter swap-instructions failed: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+
+  // 3. Build execute_swap data: discriminator + Vec<u8> (route data) + u64 (min_acquired)
+  // Borsh Vec<u8> = u32 length prefix + bytes.
+  const routeDataBytes = Buffer.from(jupiterIx.data, "base64");
+  const argBuf = Buffer.alloc(4 + routeDataBytes.length + 8);
+  argBuf.writeUInt32LE(routeDataBytes.length, 0);
+  routeDataBytes.copy(argBuf, 4);
+  argBuf.writeBigUInt64LE(params.minAcquiredAmount, 4 + routeDataBytes.length);
+
+  const data = Buffer.concat([discriminator("execute_swap"), argBuf]);
+
+  // 4. Map Jupiter accounts to our remaining_accounts (preserving signer/writable flags).
+  const jupiterRemaining = jupiterIx.accounts.map((a) => ({
+    pubkey: new PublicKey(a.pubkey),
+    isSigner: a.isSigner,
+    isWritable: a.isWritable,
+  }));
+
+  // 5. Fixed accounts in execute_swap struct order (see programs/tide/src/instructions/execute_swap.rs).
+  const fixedKeys = [
+    { pubkey: caller, isSigner: true, isWritable: true },
+    { pubkey: params.poolPda, isSigner: false, isWritable: true },
+    { pubkey: params.windowPda, isSigner: false, isWritable: true },
+    { pubkey: USDC_MINT, isSigner: false, isWritable: false },
+    { pubkey: targetMint, isSigner: false, isWritable: false },
+    { pubkey: escrowAuthority, isSigner: false, isWritable: false },
+    { pubkey: escrowInputAta, isSigner: false, isWritable: true },
+    { pubkey: escrowOutputAta, isSigner: false, isWritable: true },
+    { pubkey: new PublicKey(jupiterIx.programId), isSigner: false, isWritable: false },
+    { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+    { pubkey: ASSOCIATED_TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+    { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+    { pubkey: SYSVAR_RENT_PUBKEY, isSigner: false, isWritable: false },
+  ];
+
+  const ix = new TransactionInstruction({
+    programId: TIDE_PROGRAM_ID,
+    keys: [...fixedKeys, ...jupiterRemaining],
+    data,
+  });
+
+  const tx = new Transaction()
+    .add(ComputeBudgetProgram.setComputeUnitLimit({ units: 1_400_000 }))
+    .add(ix);
+
+  try {
+    const signature = await wallet.sendTransaction(tx, connection);
+    await connection.confirmTransaction(signature, "confirmed");
+    return { ok: true, signature, poolPda: params.poolPda, positionPda: params.windowPda };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }

@@ -17,8 +17,13 @@ import { useState } from "react";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { PublicKey } from "@solana/web3.js";
 
-import { usePool } from "@/lib/hooks";
-import { submitInitPool, submitInitWindow } from "@/lib/tide-actions";
+import { useCurrentWindow, usePool } from "@/lib/hooks";
+import {
+  submitExecuteSwap,
+  submitInitPool,
+  submitInitWindow,
+  submitTriggerAggregate,
+} from "@/lib/tide-actions";
 import { formatUsdc, shortAddress } from "@/lib/utils";
 
 type ActionState =
@@ -31,9 +36,12 @@ export default function AdminPage() {
   const { connection } = useConnection();
   const wallet = useWallet();
   const { pool, poolPubkey, loading: poolLoading } = usePool();
+  const { window: currentWindow, windowPubkey } = useCurrentWindow();
 
   const [poolState, setPoolState] = useState<ActionState>({ kind: "idle" });
   const [windowState, setWindowState] = useState<ActionState>({ kind: "idle" });
+  const [aggregateState, setAggregateState] = useState<ActionState>({ kind: "idle" });
+  const [swapState, setSwapState] = useState<ActionState>({ kind: "idle" });
 
   const handleInitPool = async () => {
     setPoolState({ kind: "submitting" });
@@ -47,25 +55,60 @@ export default function AdminPage() {
 
   const handleInitWindow = async () => {
     if (!pool) {
-      setWindowState({
-        kind: "error",
-        message: "Pool not initialized. Run init_pool first.",
-      });
+      setWindowState({ kind: "error", message: "Pool not initialized. Run init_pool first." });
       return;
     }
     setWindowState({ kind: "submitting" });
-    const result = await submitInitWindow(
-      connection,
-      wallet,
-      poolPubkey,
-      pool.windowCounter,
-    );
+    const result = await submitInitWindow(connection, wallet, poolPubkey, pool.windowCounter);
     setWindowState(
       result.ok
         ? { kind: "success", signature: result.signature }
         : { kind: "error", message: result.error },
     );
   };
+
+  const handleTriggerAggregate = async () => {
+    if (!windowPubkey) {
+      setAggregateState({ kind: "error", message: "No active window." });
+      return;
+    }
+    setAggregateState({ kind: "submitting" });
+    const result = await submitTriggerAggregate(connection, wallet, poolPubkey, windowPubkey);
+    setAggregateState(
+      result.ok
+        ? { kind: "success", signature: result.signature }
+        : { kind: "error", message: result.error },
+    );
+  };
+
+  const handleExecuteSwap = async () => {
+    if (!windowPubkey || !currentWindow) {
+      setSwapState({ kind: "error", message: "No active window." });
+      return;
+    }
+    setSwapState({ kind: "submitting" });
+    // Min acquired = 0 here is unsafe in production; for MVP we trust the
+    // Jupiter quote's slippage guard (passed inside swap-instructions). To
+    // tighten this, call fetchQuote first and pass otherAmountThreshold.
+    const result = await submitExecuteSwap(connection, wallet, {
+      poolPda: poolPubkey,
+      windowPda: windowPubkey,
+      windowNumber: currentWindow.windowNumber,
+      totalCommittedUsdc: currentWindow.totalCommittedUsdc,
+      minAcquiredAmount: 1n,
+      slippageBps: 50,
+    });
+    setSwapState(
+      result.ok
+        ? { kind: "success", signature: result.signature }
+        : { kind: "error", message: result.error },
+    );
+  };
+
+  const windowStatusLabel =
+    currentWindow == null
+      ? "—"
+      : ["Open", "Aggregating", "Distributed", "Failed"][currentWindow.status];
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-16">
@@ -160,6 +203,42 @@ export default function AdminPage() {
         }
         state={windowState}
         onClick={handleInitWindow}
+      />
+
+      <ActionCard
+        title="trigger_aggregate"
+        description={`Closes the active window for new commits and flips status to Aggregating. Current status: ${windowStatusLabel}.`}
+        buttonLabel="Trigger Aggregate"
+        disabled={!currentWindow || currentWindow.status !== 0 || !wallet.publicKey}
+        disabledReason={
+          !wallet.publicKey
+            ? "Connect wallet"
+            : !currentWindow
+              ? "No active window"
+              : currentWindow.status !== 0
+                ? `Window not open (status: ${windowStatusLabel})`
+                : undefined
+        }
+        state={aggregateState}
+        onClick={handleTriggerAggregate}
+      />
+
+      <ActionCard
+        title="execute_swap"
+        description="Pulls a Jupiter quote (USDC -> SOL, direct routes only) and forwards the swap instruction as a CPI signed by the escrow PDA. Requires window status = Aggregating."
+        buttonLabel="Execute Swap (Jupiter)"
+        disabled={!currentWindow || currentWindow.status !== 1 || !wallet.publicKey}
+        disabledReason={
+          !wallet.publicKey
+            ? "Connect wallet"
+            : !currentWindow
+              ? "No active window"
+              : currentWindow.status !== 1
+                ? `Window not Aggregating (status: ${windowStatusLabel})`
+                : undefined
+        }
+        state={swapState}
+        onClick={handleExecuteSwap}
       />
     </main>
   );

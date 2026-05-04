@@ -108,23 +108,49 @@ export async function fetchSwapTransaction(
   return response.json();
 }
 
+export interface JupiterSwapInstruction {
+  programId: string;
+  accounts: Array<{ pubkey: string; isSigner: boolean; isWritable: boolean }>;
+  data: string; // base64
+}
+
+export interface JupiterSwapInstructionsResponse {
+  computeBudgetInstructions: JupiterSwapInstruction[];
+  setupInstructions: JupiterSwapInstruction[];
+  swapInstruction: JupiterSwapInstruction;
+  cleanupInstruction: JupiterSwapInstruction | null;
+  addressLookupTableAddresses: string[];
+}
+
 /**
- * Get instructions for swap (alternative to full transaction — used for CPI from Anchor).
+ * Fetch raw swap instructions for CPI passthrough from Anchor.
  *
- * Anchor program will assemble final tx with the route data.
+ * We use this (not /swap which returns a full tx) because Tide forwards
+ * swapInstruction.data as `jupiter_route_data` and swapInstruction.accounts
+ * as `remaining_accounts`. The setup/cleanup instructions are bypassed —
+ * Tide handles input/output via its own escrow ATAs and does not need
+ * Jupiter's wSOL wrapping helpers.
  */
 export async function fetchSwapInstructions(
   quote: JupiterQuote,
   userPublicKey: PublicKey,
-): Promise<unknown> {
+  options: { destinationTokenAccount?: PublicKey } = {},
+): Promise<JupiterSwapInstructionsResponse> {
+  const body: Record<string, unknown> = {
+    quoteResponse: quote,
+    userPublicKey: userPublicKey.toBase58(),
+    // We're calling from inside our own program — Jupiter's wSOL helpers add
+    // setup/cleanup ixs we don't pass through, so disable.
+    wrapAndUnwrapSol: false,
+  };
+  if (options.destinationTokenAccount) {
+    body.destinationTokenAccount = options.destinationTokenAccount.toBase58();
+  }
+
   const response = await fetch(`${JUPITER_API_BASE}/swap-instructions`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      quoteResponse: quote,
-      userPublicKey: userPublicKey.toBase58(),
-      wrapAndUnwrapSol: true,
-    }),
+    body: JSON.stringify(body),
   });
   if (!response.ok) {
     throw new Error(

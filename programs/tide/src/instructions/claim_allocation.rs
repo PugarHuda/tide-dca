@@ -1,7 +1,7 @@
 //! User claims their pro-rata token allocation post-execute.
 
 use anchor_lang::prelude::*;
-use anchor_spl::token::{transfer, Token, TokenAccount, Transfer};
+use anchor_spl::token::{transfer, Mint, Token, TokenAccount, Transfer};
 
 use crate::error::TideError;
 use crate::state::{DcaPosition, Intent, Window, ESCROW_SEED_PREFIX};
@@ -10,6 +10,10 @@ use crate::state::{DcaPosition, Intent, Window, ESCROW_SEED_PREFIX};
 pub struct ClaimAllocation<'info> {
     #[account(mut)]
     pub owner: Signer<'info>,
+
+    /// Target token mint (e.g. wrapped SOL). Used to derive escrow_output_ata
+    /// via the standard associated-token-account convention.
+    pub target_mint: Account<'info, Mint>,
 
     #[account(
         mut,
@@ -41,23 +45,29 @@ pub struct ClaimAllocation<'info> {
     )]
     pub position: Account<'info, DcaPosition>,
 
-    /// Escrow target-token ATA (holds output tokens post-execute).
+    /// Escrow target-token ATA (holds output tokens post-execute). Standard
+    /// ATA derivation matches what execute_swap created.
     #[account(
         mut,
-        seeds = [ESCROW_SEED_PREFIX, window.key().as_ref(), b"output"],
-        bump,
+        associated_token::mint = target_mint,
+        associated_token::authority = escrow_authority,
     )]
     pub escrow_output_ata: Account<'info, TokenAccount>,
 
-    /// CHECK: PDA authority
+    /// CHECK: PDA authority. Same custom PDA used everywhere else.
     #[account(
         seeds = [ESCROW_SEED_PREFIX, window.key().as_ref(), b"authority"],
         bump,
     )]
     pub escrow_authority: AccountInfo<'info>,
 
-    /// User's target token ATA (receives allocation).
-    #[account(mut)]
+    /// User's target token ATA (receives allocation). Caller may pre-create
+    /// via createAssociatedTokenAccountIdempotent if needed.
+    #[account(
+        mut,
+        token::mint = target_mint,
+        token::authority = owner,
+    )]
     pub owner_output_ata: Account<'info, TokenAccount>,
 
     pub token_program: Program<'info, Token>,

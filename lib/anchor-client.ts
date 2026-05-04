@@ -83,37 +83,18 @@ export function findIntentPda(
   );
 }
 
-export function findEscrowPda(
-  window: PublicKey,
-  programId = TIDE_PROGRAM_ID,
-): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [Buffer.from(SEED_ESCROW), window.toBuffer()],
-    programId,
-  );
-}
-
+/**
+ * Escrow authority — the only custom PDA in the escrow set. Both input
+ * (USDC) and output (target mint) escrows are now standard ATAs owned by
+ * this authority, so they're derived via @solana/spl-token's
+ * getAssociatedTokenAddressSync(mint, authority) at the call site.
+ */
 export function findEscrowAuthorityPda(
   window: PublicKey,
   programId = TIDE_PROGRAM_ID,
 ): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [Buffer.from(SEED_ESCROW), window.toBuffer(), Buffer.from("authority")],
-    programId,
-  );
-}
-
-/**
- * Output-token escrow ATA (target mint, e.g. wrapped SOL). Created lazily by
- * execute_swap; drained by claim_allocation. Distinct seed from the
- * USDC-input escrow which uses just [escrow, window].
- */
-export function findEscrowOutputAtaPda(
-  window: PublicKey,
-  programId = TIDE_PROGRAM_ID,
-): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [Buffer.from(SEED_ESCROW), window.toBuffer(), Buffer.from("output")],
     programId,
   );
 }

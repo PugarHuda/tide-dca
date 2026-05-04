@@ -1,35 +1,79 @@
+"use client";
+
+import Link from "next/link";
+import type { Route } from "next";
+
 import { SavingsChart } from "@/components/savings-chart";
 import { WindowStatusCard } from "@/components/window-status-card";
-import { formatUsdc, formatSol, bpsToPct } from "@/lib/utils";
+import { useTideWallet } from "@/lib/hooks/use-tide-wallet";
+import {
+  useCurrentWindow,
+  usePool,
+  useUserIntent,
+  useUserPosition,
+} from "@/lib/hooks";
+import { calculateSavings, bpsToPct, formatSol, formatUsdc } from "@/lib/utils";
 
-/**
- * User dashboard — shows DCA stats + savings tracker + current window.
- *
- * TODO when on-chain:
- * - Fetch DcaPosition account for connected wallet
- * - Fetch Window account via /api/window/current
- * - Fetch Pool stats via /api/pool/stats
- * - Compute real savings vs Jupiter direct from history
- */
+const STANDALONE_SLIPPAGE_BPS_DEFAULT = 50; // assumed retail spot/DCA reference
 
-export default async function DashboardPage() {
-  // Stub data — replace with on-chain fetch
-  const userStats = {
-    totalDeposited: 1_300_000_000n,
-    totalAcquired: 12_990_000_000n,
-    totalSaved: 6_240_000n,
-    windowsParticipated: 26,
-    averagePoolSlippage: 5,
-    averageStandaloneSlippage: 50,
-    pendingClaim: 198_000_000n,
-  };
+export default function DashboardPage() {
+  const { connected } = useTideWallet();
+  const { pool, loading: poolLoading } = usePool();
+  const { position } = useUserPosition();
+  const { window: currentWindow, windowPubkey } = useCurrentWindow();
+  const { intent: pendingIntent } = useUserIntent(windowPubkey);
 
-  const windowState = {
-    totalCommitted: 12_400_000_000n,
-    participantCount: 247,
-    endTs: Math.floor(Date.now() / 1000) + 1800, // 30 min from now
-    status: 0 as const,
-  };
+  if (!connected) {
+    return (
+      <EmptyState
+        title="Connect your wallet"
+        body="Sign in to see your DCA stats, current window status, and pending claims."
+      />
+    );
+  }
+
+  if (poolLoading) {
+    return <EmptyState title="Loading pool…" body="Fetching on-chain state." />;
+  }
+
+  if (!pool) {
+    return (
+      <EmptyState
+        title="Pool not initialized yet"
+        body="The Tide USDC→SOL pool hasn't been created on this network. Run the admin init_pool flow first."
+      />
+    );
+  }
+
+  if (!position) {
+    return (
+      <EmptyState
+        title="No DCA position yet"
+        body="You haven't set up recurring DCA on this pool."
+        cta={{ label: "Set up DCA", href: "/setup" }}
+      />
+    );
+  }
+
+  // ── Derived UI numbers ──
+  const avgPoolSlippageBps = currentWindow?.effectiveSlippageBps ?? pool.feeBps;
+  const totalSaved = calculateSavings(
+    avgPoolSlippageBps,
+    STANDALONE_SLIPPAGE_BPS_DEFAULT,
+    position.totalDeposited,
+  );
+  const pendingClaim =
+    pendingIntent && currentWindow?.status === 2 && !pendingIntent.claimed
+      ? pendingIntent.allocatedAmount
+      : 0n;
+  const nextWindowSeconds = currentWindow
+    ? Math.max(0, Number(currentWindow.endTs) - Math.floor(Date.now() / 1000))
+    : 0;
+  const nextLabel =
+    nextWindowSeconds > 3600
+      ? `in ${Math.floor(nextWindowSeconds / 3600)}h`
+      : `in ${Math.floor(nextWindowSeconds / 60)}m`;
+  const windowDurationLabel = `${Number(pool.windowDurationSeconds) / 60} minutes`;
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-16">
@@ -39,40 +83,38 @@ export default async function DashboardPage() {
             Your Tide Dashboard
           </p>
           <h1 className="mt-2 text-3xl font-bold tracking-tight">
-            Saved {formatUsdc(userStats.totalSaved)} so far
+            Saved {formatUsdc(totalSaved)} so far
           </h1>
         </div>
-        <a
+        <Link
           href="/setup"
           className="rounded-md border border-zinc-700 px-4 py-2 text-sm hover:bg-zinc-900"
         >
           Adjust DCA
-        </a>
+        </Link>
       </header>
 
       <section className="mb-10 grid gap-4 md:grid-cols-4">
-        <Card label="Total deposited" value={formatUsdc(userStats.totalDeposited)} />
-        <Card
-          label="Total acquired"
-          value={formatSol(userStats.totalAcquired)}
-        />
+        <Card label="Total deposited" value={formatUsdc(position.totalDeposited)} />
+        <Card label="Total acquired" value={formatSol(position.totalAcquired)} />
         <Card
           label="Avg slippage"
-          value={bpsToPct(userStats.averagePoolSlippage)}
-          subtext={`vs ${bpsToPct(userStats.averageStandaloneSlippage)} standalone`}
+          value={bpsToPct(avgPoolSlippageBps)}
+          subtext={`vs ${bpsToPct(STANDALONE_SLIPPAGE_BPS_DEFAULT)} standalone`}
         />
         <Card
-          label="Windows participated"
-          value={userStats.windowsParticipated.toString()}
+          label="Last window joined"
+          value={position.lastWindow.toString()}
         />
       </section>
 
-      {userStats.pendingClaim > 0n && (
+      {pendingClaim > 0n && (
         <section className="mb-10 flex items-center justify-between rounded-lg border border-cyan-500/30 bg-cyan-950/20 p-5">
           <div>
             <h3 className="font-semibold">Pending allocation</h3>
             <p className="text-sm text-zinc-400">
-              {formatSol(userStats.pendingClaim)} ready to claim from last window
+              {formatSol(pendingClaim)} ready to claim from window #
+              {currentWindow?.windowNumber.toString()}
             </p>
           </div>
           <button className="rounded-md bg-cyan-500 px-4 py-2 font-medium text-zinc-900 transition hover:bg-cyan-400">
@@ -82,23 +124,38 @@ export default async function DashboardPage() {
       )}
 
       <section className="mb-10 grid gap-6 lg:grid-cols-2">
-        <WindowStatusCard
-          totalCommitted={windowState.totalCommitted}
-          participantCount={windowState.participantCount}
-          endTs={windowState.endTs}
-          status={windowState.status}
-        />
+        {currentWindow ? (
+          <WindowStatusCard
+            totalCommitted={currentWindow.totalCommittedUsdc}
+            participantCount={currentWindow.intentCount}
+            endTs={Number(currentWindow.endTs)}
+            status={currentWindow.status}
+          />
+        ) : (
+          <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-5 text-sm text-zinc-400">
+            No active window. Run init_window to open the next cycle.
+          </div>
+        )}
         <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-5">
           <h3 className="mb-4 font-semibold">Your Position</h3>
           <dl className="space-y-3 text-sm">
-            <Row label="DCA amount per window" value={formatUsdc(50_000_000n)} />
-            <Row label="Window duration" value="1 hour" />
-            <Row label="Max slippage" value="1.0%" />
-            <Row label="Status" value={<span className="text-emerald-400">Active</span>} />
             <Row
-              label="Next contribution"
-              value={`in ${Math.floor((windowState.endTs - Math.floor(Date.now() / 1000)) / 60)}m`}
+              label="DCA amount per window"
+              value={formatUsdc(position.amountPerWindow)}
             />
+            <Row label="Window duration" value={windowDurationLabel} />
+            <Row label="Max slippage" value={bpsToPct(position.maxSlippageBps)} />
+            <Row
+              label="Status"
+              value={
+                position.active ? (
+                  <span className="text-emerald-400">Active</span>
+                ) : (
+                  <span className="text-zinc-400">Paused</span>
+                )
+              }
+            />
+            <Row label="Next contribution" value={nextLabel} />
           </dl>
         </div>
       </section>
@@ -109,7 +166,9 @@ export default async function DashboardPage() {
       </section>
 
       <p className="mt-10 text-center text-xs text-zinc-600">
-        Stub data shown. Replace with on-chain fetch via /api/pool/stats and /api/window/current.
+        Live data via @solana/web3.js account subscriptions. Savings curve still
+        uses a synthetic series — backfill from Helius DAS once we have window
+        history.
       </p>
     </main>
   );
@@ -139,5 +198,30 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
       <dt className="text-zinc-500">{label}</dt>
       <dd className="font-mono">{value}</dd>
     </div>
+  );
+}
+
+function EmptyState({
+  title,
+  body,
+  cta,
+}: {
+  title: string;
+  body: string;
+  cta?: { label: string; href: Route };
+}) {
+  return (
+    <main className="mx-auto max-w-2xl px-6 py-24 text-center">
+      <h1 className="mb-3 text-2xl font-semibold">{title}</h1>
+      <p className="text-zinc-400">{body}</p>
+      {cta && (
+        <Link
+          href={cta.href}
+          className="mt-6 inline-block rounded-md bg-cyan-500 px-5 py-2 font-medium text-zinc-900 transition hover:bg-cyan-400"
+        >
+          {cta.label}
+        </Link>
+      )}
+    </main>
   );
 }

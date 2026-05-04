@@ -3,43 +3,68 @@
 /**
  * React hooks for Tide on-chain data.
  *
- * Stack: @solana/wallet-adapter-react for connection + wallet
- * @coral-xyz/anchor for program interaction
- *
- * TODO after IDL generated:
- * - Replace `any` with typed Program
- * - Implement real account fetches
+ * Decodes raw account data via lib/account-decoders.ts (no IDL needed —
+ * see that file for the rationale). Pool/Window subscriptions use
+ * connection.onAccountChange so the dashboard updates live without polling.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useConnection } from "@solana/wallet-adapter-react";
 import { PublicKey } from "@solana/web3.js";
 
-import type { DcaPosition, Pool, Window } from "./types";
 import {
-  findDcaPositionPda,
-  findPoolPda,
-} from "./anchor-client";
-import { SOL_MINT, USDC_MINT_DEVNET } from "./constants";
+  decodeDcaPosition,
+  decodeIntent,
+  decodePool,
+  decodeWindow,
+} from "./account-decoders";
+import { findDcaPositionPda, findPoolPda, findWindowPda } from "./anchor-client";
+import { CURRENT_NETWORK, SOL_MINT, USDC_MINT_DEVNET, USDC_MINT_MAINNET } from "./constants";
+import type { DcaPosition, Intent, Pool, Window } from "./types";
 import { useTideWallet } from "./hooks/use-tide-wallet";
+import { findIntentPda } from "./anchor-client";
 
-/** Fetch the canonical SOL/USDC pool. */
+const USDC_MINT =
+  CURRENT_NETWORK === "mainnet" ? USDC_MINT_MAINNET : USDC_MINT_DEVNET;
+
+/** Fetch the canonical SOL/USDC pool — reactive to chain updates. */
 export function usePool(): {
   pool: Pool | null;
-  poolPubkey: PublicKey | null;
+  poolPubkey: PublicKey;
   loading: boolean;
 } {
+  const { connection } = useConnection();
   const [pool, setPool] = useState<Pool | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const [poolPubkey] = findPoolPda(USDC_MINT_DEVNET, SOL_MINT);
+  const [poolPubkey] = findPoolPda(USDC_MINT, SOL_MINT);
 
   useEffect(() => {
-    // TODO: fetch Pool account via anchor.account.pool.fetch(poolPubkey)
-    // For now: stub data
-    setLoading(false);
-    setPool(null);
-  }, []);
+    let cancelled = false;
+    setLoading(true);
+
+    connection
+      .getAccountInfo(poolPubkey, "confirmed")
+      .then((info) => {
+        if (cancelled) return;
+        setPool(info ? decodePool(info.data as Buffer) : null);
+      })
+      .catch(() => !cancelled && setPool(null))
+      .finally(() => !cancelled && setLoading(false));
+
+    const subId = connection.onAccountChange(poolPubkey, (info) => {
+      try {
+        setPool(decodePool(info.data as Buffer));
+      } catch {
+        setPool(null);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      void connection.removeAccountChangeListener(subId);
+    };
+  }, [connection, poolPubkey]);
 
   return { pool, poolPubkey, loading };
 }
@@ -50,84 +75,175 @@ export function useUserPosition(): {
   positionPubkey: PublicKey | null;
   loading: boolean;
 } {
+  const { connection } = useConnection();
   const { publicKey } = useTideWallet();
   const { poolPubkey } = usePool();
   const [position, setPosition] = useState<DcaPosition | null>(null);
   const [loading, setLoading] = useState(true);
 
   const positionPubkey =
-    publicKey && poolPubkey ? findDcaPositionPda(publicKey, poolPubkey)[0] : null;
+    publicKey ? findDcaPositionPda(publicKey, poolPubkey)[0] : null;
 
   useEffect(() => {
     if (!positionPubkey) {
+      setPosition(null);
       setLoading(false);
       return;
     }
-    // TODO: fetch DcaPosition account
-    setLoading(false);
-    setPosition(null);
-  }, [positionPubkey]);
+    let cancelled = false;
+    setLoading(true);
+
+    connection
+      .getAccountInfo(positionPubkey, "confirmed")
+      .then((info) => {
+        if (cancelled) return;
+        setPosition(info ? decodeDcaPosition(info.data as Buffer) : null);
+      })
+      .catch(() => !cancelled && setPosition(null))
+      .finally(() => !cancelled && setLoading(false));
+
+    const subId = connection.onAccountChange(positionPubkey, (info) => {
+      try {
+        setPosition(decodeDcaPosition(info.data as Buffer));
+      } catch {
+        setPosition(null);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      void connection.removeAccountChangeListener(subId);
+    };
+  }, [connection, positionPubkey?.toBase58()]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return { position, positionPubkey, loading };
 }
 
-/** Fetch current active window for a pool. */
+/** Fetch the pool's currently active Window with live countdown. */
 export function useCurrentWindow(): {
   window: Window | null;
   windowPubkey: PublicKey | null;
   loading: boolean;
-  timeRemaining: number; // seconds until window closes
+  timeRemaining: number;
 } {
-  const { pool } = usePool();
+  const { connection } = useConnection();
+  const { pool, poolPubkey } = usePool();
   const [window, setWindow] = useState<Window | null>(null);
-  const [timeRemaining, setTimeRemaining] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [timeRemaining, setTimeRemaining] = useState(0);
+
+  // Pool tracks `windowCounter` (next-to-create) and `activeWindow` (current).
+  // Prefer activeWindow pointer; fall back to derived PDA from counter-1.
+  const windowPubkey: PublicKey | null = (() => {
+    if (!pool) return null;
+    if (!pool.activeWindow.equals(PublicKey.default)) return pool.activeWindow;
+    if (pool.windowCounter > 0n) {
+      return findWindowPda(poolPubkey, pool.windowCounter - 1n)[0];
+    }
+    return null;
+  })();
+
+  // Track latest pubkey via ref so subscription cleanup can compare.
+  const subscribedRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!pool) {
+    if (!windowPubkey) {
+      setWindow(null);
       setLoading(false);
       return;
     }
-    // TODO: fetch active Window via pool.activeWindow
-    setLoading(false);
-  }, [pool]);
+    let cancelled = false;
+    setLoading(true);
 
-  // Update countdown every second
+    connection
+      .getAccountInfo(windowPubkey, "confirmed")
+      .then((info) => {
+        if (cancelled) return;
+        setWindow(info ? decodeWindow(info.data as Buffer) : null);
+      })
+      .catch(() => !cancelled && setWindow(null))
+      .finally(() => !cancelled && setLoading(false));
+
+    subscribedRef.current = windowPubkey.toBase58();
+    const subId = connection.onAccountChange(windowPubkey, (info) => {
+      try {
+        setWindow(decodeWindow(info.data as Buffer));
+      } catch {
+        setWindow(null);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      void connection.removeAccountChangeListener(subId);
+    };
+  }, [connection, windowPubkey?.toBase58()]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Local-clock-driven countdown; doesn't need RPC.
   useEffect(() => {
-    if (!window) return;
-    const interval = setInterval(() => {
-      const now = Math.floor(Date.now() / 1000);
-      const remaining = Number(window.endTs) - now;
+    if (!window) {
+      setTimeRemaining(0);
+      return;
+    }
+    const tick = () => {
+      const remaining = Number(window.endTs) - Math.floor(Date.now() / 1000);
       setTimeRemaining(Math.max(0, remaining));
-    }, 1000);
-    return () => clearInterval(interval);
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
   }, [window]);
 
-  return {
-    window,
-    windowPubkey: pool?.activeWindow ?? null,
-    loading,
-    timeRemaining,
-  };
+  return { window, windowPubkey, loading, timeRemaining };
 }
 
-/** Subscribe to window updates via WebSocket (Helius). */
-export function useWindowSubscription(windowPubkey: PublicKey | null) {
+/** Fetch the user's Intent for a specific window (if committed). */
+export function useUserIntent(windowPubkey: PublicKey | null): {
+  intent: Intent | null;
+  intentPubkey: PublicKey | null;
+  loading: boolean;
+} {
   const { connection } = useConnection();
-  const [window, setWindow] = useState<Window | null>(null);
+  const { publicKey } = useTideWallet();
+  const [intent, setIntent] = useState<Intent | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const intentPubkey =
+    publicKey && windowPubkey
+      ? findIntentPda(windowPubkey, publicKey)[0]
+      : null;
 
   useEffect(() => {
-    if (!windowPubkey) return;
+    if (!intentPubkey) {
+      setIntent(null);
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
 
-    // TODO: subscribe to account changes
-    // const subscriptionId = connection.onAccountChange(windowPubkey, (accountInfo) => {
-    //   const decoded = program.coder.accounts.decode("window", accountInfo.data);
-    //   setWindow(decoded);
-    // });
-    // return () => connection.removeAccountChangeListener(subscriptionId);
+    connection
+      .getAccountInfo(intentPubkey, "confirmed")
+      .then((info) => {
+        if (cancelled) return;
+        setIntent(info ? decodeIntent(info.data as Buffer) : null);
+      })
+      .catch(() => !cancelled && setIntent(null))
+      .finally(() => !cancelled && setLoading(false));
 
-    void connection;
-  }, [windowPubkey, connection]);
+    const subId = connection.onAccountChange(intentPubkey, (info) => {
+      try {
+        setIntent(decodeIntent(info.data as Buffer));
+      } catch {
+        setIntent(null);
+      }
+    });
 
-  return window;
+    return () => {
+      cancelled = true;
+      void connection.removeAccountChangeListener(subId);
+    };
+  }, [connection, intentPubkey?.toBase58()]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return { intent, intentPubkey, loading };
 }

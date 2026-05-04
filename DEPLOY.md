@@ -11,7 +11,7 @@ Run these before attempting `anchor deploy`. They take ~30s total.
 
 | Check | Command | Pass criterion |
 |---|---|---|
-| Program ID consistent | `grep -h CLMop5kyE programs/tide/src/lib.rs Anchor.toml .env.local` | All three lines match `CLMop5kyE4jqnca98eZVrs5nc93HSVdT13xqARtSH2GZ` |
+| Program ID consistent | `grep -h HanBZ74Q programs/tide/src/lib.rs Anchor.toml .env.local` | All three lines match `HanBZ74Q7syXerryjezBXCne23FUp6caeWeTPPAmebQg` |
 | Solana wallet has balance | `solana balance` | ≥ 2 SOL (deploy costs ~1.4 SOL on devnet) |
 | Cluster set to devnet | `solana config get` | `RPC URL: https://api.devnet.solana.com` |
 | Anchor CLI matches lib | `anchor --version`, `grep anchor-lang programs/tide/Cargo.toml` | Both 0.31.1 |
@@ -55,7 +55,7 @@ If `anchor build` fails on platform-tools, see `SETUP.md` Section "anchor build"
 anchor deploy --provider.cluster devnet
 ```
 
-Watch for `Program Id: CLMop5kyE...` (must match `lib/constants.ts` and `.env.local`).
+Watch for `Program Id: HanBZ74Q...` (must match `lib/constants.ts` and `.env.local`).
 
 Common failure: `insufficient funds for fee` — top up:
 
@@ -68,7 +68,7 @@ If a previous deploy left the program in an inconsistent upgrade state (rare),
 close + redeploy:
 
 ```bash
-solana program close CLMop5kyE4jqnca98eZVrs5nc93HSVdT13xqARtSH2GZ --bypass-warning
+solana program close HanBZ74Q7syXerryjezBXCne23FUp6caeWeTPPAmebQg --bypass-warning
 anchor deploy --provider.cluster devnet
 ```
 
@@ -77,7 +77,7 @@ anchor deploy --provider.cluster devnet
 ## 3. Verify Deployment
 
 ```bash
-solana program show CLMop5kyE4jqnca98eZVrs5nc93HSVdT13xqARtSH2GZ \
+solana program show HanBZ74Q7syXerryjezBXCne23FUp6caeWeTPPAmebQg \
   --url https://api.devnet.solana.com
 ```
 
@@ -88,7 +88,7 @@ Expected fields:
 - `Last Deployed In Slot` recent
 
 Cross-check on Solana Explorer:
-`https://explorer.solana.com/address/CLMop5kyE4jqnca98eZVrs5nc93HSVdT13xqARtSH2GZ?cluster=devnet`
+`https://explorer.solana.com/address/HanBZ74Q7syXerryjezBXCne23FUp6caeWeTPPAmebQg?cluster=devnet`
 
 ---
 

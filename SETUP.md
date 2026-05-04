@@ -28,7 +28,7 @@
   ```
 
 ### Tide program keypair generated
-- **Program ID**: `CLMop5kyE4jqnca98eZVrs5nc93HSVdT13xqARtSH2GZ`
+- **Program ID**: `HanBZ74Q7syXerryjezBXCne23FUp6caeWeTPPAmebQg`
 - **Keypair file**: `target/deploy/tide-keypair.json`
 - **Already updated** di:
   - `programs/tide/src/lib.rs` (`declare_id!`)

@@ -15,6 +15,7 @@
 
 import { sha256 } from "@noble/hashes/sha256";
 import {
+  AddressLookupTableAccount,
   ComputeBudgetProgram,
   Connection,
   PublicKey,
@@ -22,6 +23,8 @@ import {
   SYSVAR_RENT_PUBKEY,
   Transaction,
   TransactionInstruction,
+  TransactionMessage,
+  VersionedTransaction,
   type Signer,
 } from "@solana/web3.js";
 
@@ -60,9 +63,9 @@ const USDC_MINT =
 /** Wallet shape we accept — matches @solana/wallet-adapter-react's WalletContextState subset. */
 export interface SignerWallet {
   publicKey: PublicKey | null;
-  signTransaction?: <T extends Transaction>(tx: T) => Promise<T>;
+  signTransaction?: <T extends Transaction | VersionedTransaction>(tx: T) => Promise<T>;
   sendTransaction?: (
-    tx: Transaction,
+    tx: Transaction | VersionedTransaction,
     connection: Connection,
     options?: { signers?: Signer[] },
   ) => Promise<string>;
@@ -384,10 +387,10 @@ export async function submitTriggerAggregate(
 // jupiter_route_data — Anchor then invoke_signed's it under the
 // escrow_authority PDA.
 //
-// Important: Jupiter routes can pull in many accounts. We pass
-// `onlyDirectRoutes=true` to keep the count low enough to fit in a legacy
-// transaction. A full v0+ALT setup is the next step if direct routes don't
-// have enough liquidity for the aggregate amount.
+// We send as a v0 VersionedTransaction with Jupiter's address lookup tables
+// resolved on the client. Without ALTs, multi-hop Jupiter routes blow past
+// the legacy ~35-pubkey limit. With ALTs, references to common accounts
+// (token programs, AMM pools, ATA program, etc.) collapse to 1-byte indices.
 
 export type ExecuteSwapParams = {
   poolPda: PublicKey;
@@ -418,6 +421,7 @@ export async function submitExecuteSwap(
   const escrowOutputAta = getAssociatedTokenAddressSync(targetMint, escrowAuthority, true);
 
   // 1. Fetch Jupiter quote — ExactIn with escrow's full USDC balance.
+  //    No onlyDirectRoutes restriction now that we send as v0 + ALT.
   let quote;
   try {
     quote = await fetchQuote({
@@ -425,7 +429,6 @@ export async function submitExecuteSwap(
       outputMint: targetMint,
       amount: params.totalCommittedUsdc,
       slippageBps,
-      onlyDirectRoutes: true, // keep account count compact for legacy tx
     });
   } catch (err) {
     return {
@@ -434,13 +437,15 @@ export async function submitExecuteSwap(
     };
   }
 
-  // 2. Fetch raw swap instructions; route output to our escrow ATA directly.
+  // 2. Fetch raw swap instructions + the Jupiter-curated lookup tables.
   let jupiterIx;
+  let lookupTableAddresses: string[] = [];
   try {
     const swapResponse = await fetchSwapInstructions(quote, escrowAuthority, {
       destinationTokenAccount: escrowOutputAta,
     });
     jupiterIx = swapResponse.swapInstruction;
+    lookupTableAddresses = swapResponse.addressLookupTableAddresses ?? [];
   } catch (err) {
     return {
       ok: false,
@@ -448,8 +453,23 @@ export async function submitExecuteSwap(
     };
   }
 
-  // 3. Build execute_swap data: discriminator + Vec<u8> (route data) + u64 (min_acquired)
-  // Borsh Vec<u8> = u32 length prefix + bytes.
+  // 3. Resolve ALT pubkeys to AddressLookupTableAccount instances on the wire.
+  //    getAddressLookupTable resolves cluster-wide; null means table doesn't
+  //    exist on this cluster (devnet vs mainnet drift is the usual cause).
+  const lookupTables: AddressLookupTableAccount[] = [];
+  for (const addr of lookupTableAddresses) {
+    try {
+      const res = await connection.getAddressLookupTable(new PublicKey(addr));
+      if (res.value) lookupTables.push(res.value);
+    } catch {
+      // Soft-fail per ALT — Jupiter sometimes returns mainnet ALT addresses
+      // even when quoted from devnet API. Skipping a missing one is OK as
+      // long as the route's accounts are still resolvable inline.
+    }
+  }
+
+  // 4. Build execute_swap data: discriminator + Vec<u8> (route data) + u64 (min_acquired)
+  //    Borsh Vec<u8> = u32 length prefix + bytes.
   const routeDataBytes = Buffer.from(jupiterIx.data, "base64");
   const argBuf = Buffer.alloc(4 + routeDataBytes.length + 8);
   argBuf.writeUInt32LE(routeDataBytes.length, 0);
@@ -458,14 +478,14 @@ export async function submitExecuteSwap(
 
   const data = Buffer.concat([discriminator("execute_swap"), argBuf]);
 
-  // 4. Map Jupiter accounts to our remaining_accounts (preserving signer/writable flags).
+  // 5. Map Jupiter accounts to our remaining_accounts (preserving flags).
   const jupiterRemaining = jupiterIx.accounts.map((a) => ({
     pubkey: new PublicKey(a.pubkey),
     isSigner: a.isSigner,
     isWritable: a.isWritable,
   }));
 
-  // 5. Fixed accounts in execute_swap struct order (see programs/tide/src/instructions/execute_swap.rs).
+  // 6. Fixed accounts in ExecuteSwap struct order.
   const fixedKeys = [
     { pubkey: caller, isSigner: true, isWritable: true },
     { pubkey: params.poolPda, isSigner: false, isWritable: true },
@@ -482,15 +502,24 @@ export async function submitExecuteSwap(
     { pubkey: SYSVAR_RENT_PUBKEY, isSigner: false, isWritable: false },
   ];
 
-  const ix = new TransactionInstruction({
+  const tideIx = new TransactionInstruction({
     programId: TIDE_PROGRAM_ID,
     keys: [...fixedKeys, ...jupiterRemaining],
     data,
   });
 
-  const tx = new Transaction()
-    .add(ComputeBudgetProgram.setComputeUnitLimit({ units: 1_400_000 }))
-    .add(ix);
+  // 7. Compile to v0 message with Jupiter's lookup tables.
+  const { blockhash } = await connection.getLatestBlockhash("confirmed");
+  const message = new TransactionMessage({
+    payerKey: caller,
+    recentBlockhash: blockhash,
+    instructions: [
+      ComputeBudgetProgram.setComputeUnitLimit({ units: 1_400_000 }),
+      tideIx,
+    ],
+  }).compileToV0Message(lookupTables);
+
+  const tx = new VersionedTransaction(message);
 
   try {
     const signature = await wallet.sendTransaction(tx, connection);

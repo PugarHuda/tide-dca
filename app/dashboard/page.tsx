@@ -18,6 +18,7 @@ import {
   submitClaimAllocation,
   submitCommitIntent,
 } from "@/lib/tide-actions";
+import { useToast } from "@/components/toast";
 import {
   bpsToPct,
   calculateSavings,
@@ -27,53 +28,59 @@ import {
 
 const STANDALONE_SLIPPAGE_BPS_DEFAULT = 50;
 
-type ActionState =
-  | { kind: "idle" }
-  | { kind: "submitting" }
-  | { kind: "success"; signature: string }
-  | { kind: "error"; message: string };
-
 export default function DashboardPage() {
   const { connection } = useConnection();
   const wallet = useWallet();
+  const toast = useToast();
   const { connected } = useTideWallet();
   const { pool, poolPubkey, loading: poolLoading } = usePool();
   const { position } = useUserPosition();
   const { window: currentWindow, windowPubkey } = useCurrentWindow();
   const { intent: pendingIntent } = useUserIntent(windowPubkey);
-  const [claimState, setClaimState] = useState<ActionState>({ kind: "idle" });
-  const [commitState, setCommitState] = useState<ActionState>({ kind: "idle" });
+  const [claiming, setClaiming] = useState(false);
+  const [committing, setCommitting] = useState(false);
 
   const handleClaim = async () => {
     if (!windowPubkey || !currentWindow) return;
-    setClaimState({ kind: "submitting" });
-    const result = await submitClaimAllocation(connection, wallet, {
-      poolPda: poolPubkey,
-      windowPda: windowPubkey,
-      windowNumber: currentWindow.windowNumber,
-    });
-    setClaimState(
-      result.ok
-        ? { kind: "success", signature: result.signature }
-        : { kind: "error", message: result.error },
-    );
+    setClaiming(true);
+    try {
+      const result = await submitClaimAllocation(connection, wallet, {
+        poolPda: poolPubkey,
+        windowPda: windowPubkey,
+        windowNumber: currentWindow.windowNumber,
+      });
+      if (result.ok) {
+        toast.success("Allocation claimed", { explorerSig: result.signature });
+      } else {
+        toast.error(result.error);
+      }
+    } finally {
+      setClaiming(false);
+    }
   };
 
   const handleCommit = async () => {
     if (!windowPubkey || !currentWindow || !position) return;
-    setCommitState({ kind: "submitting" });
-    const result = await submitCommitIntent(connection, wallet, {
-      poolPda: poolPubkey,
-      windowPda: windowPubkey,
-      windowNumber: currentWindow.windowNumber,
-      amountUsdc: Number(position.amountPerWindow) / 1_000_000,
-      maxSlippageBps: position.maxSlippageBps,
-    });
-    setCommitState(
-      result.ok
-        ? { kind: "success", signature: result.signature }
-        : { kind: "error", message: result.error },
-    );
+    setCommitting(true);
+    try {
+      const result = await submitCommitIntent(connection, wallet, {
+        poolPda: poolPubkey,
+        windowPda: windowPubkey,
+        windowNumber: currentWindow.windowNumber,
+        amountUsdc: Number(position.amountPerWindow) / 1_000_000,
+        maxSlippageBps: position.maxSlippageBps,
+      });
+      if (result.ok) {
+        toast.success(
+          `Committed ${formatUsdc(position.amountPerWindow)} to window #${currentWindow.windowNumber.toString()}`,
+          { explorerSig: result.signature },
+        );
+      } else {
+        toast.error(result.error);
+      }
+    } finally {
+      setCommitting(false);
+    }
   };
 
   if (!connected) {
@@ -198,12 +205,9 @@ export default function DashboardPage() {
               only the aggregate lands on chain.
             </>
           }
-          actionLabel={
-            commitState.kind === "submitting" ? "Committing…" : "Commit"
-          }
+          actionLabel="Commit"
           onAction={() => void handleCommit()}
-          submitting={commitState.kind === "submitting"}
-          state={commitState}
+          submitting={committing}
         />
       )}
 
@@ -236,12 +240,9 @@ export default function DashboardPage() {
               {currentWindow?.windowNumber.toString()}
             </>
           }
-          actionLabel={
-            claimState.kind === "submitting" ? "Claiming…" : "Claim"
-          }
+          actionLabel="Claim"
           onAction={() => void handleClaim()}
-          submitting={claimState.kind === "submitting"}
-          state={claimState}
+          submitting={claiming}
         />
       )}
 
@@ -395,14 +396,12 @@ function ActionBanner({
   actionLabel,
   onAction,
   submitting,
-  state,
 }: {
   title: string;
   body: React.ReactNode;
   actionLabel: string;
   onAction: () => void;
   submitting: boolean;
-  state: ActionState;
 }) {
   return (
     <section
@@ -446,37 +445,10 @@ function ActionBanner({
           disabled={submitting}
           className="btn btn--primary"
         >
-          {actionLabel}
+          {submitting && <span className="spinner spinner--sm" />}
+          {submitting ? `${actionLabel}…` : actionLabel}
         </button>
       </div>
-      {state.kind === "success" && (
-        <p
-          className="tiny"
-          style={{
-            color: "var(--good)",
-            margin: 0,
-            marginTop: 12,
-          }}
-        >
-          ✓ Confirmed.{" "}
-          <a
-            style={{ textDecoration: "underline" }}
-            href={`https://explorer.solana.com/tx/${state.signature}?cluster=devnet`}
-            target="_blank"
-            rel="noreferrer"
-          >
-            View on Solana Explorer
-          </a>
-        </p>
-      )}
-      {state.kind === "error" && (
-        <p
-          className="tiny"
-          style={{ color: "var(--bad)", margin: 0, marginTop: 12 }}
-        >
-          ✗ {state.message}
-        </p>
-      )}
     </section>
   );
 }

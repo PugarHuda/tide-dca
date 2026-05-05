@@ -20,96 +20,77 @@ import {
   submitInitWindow,
   submitTriggerAggregate,
 } from "@/lib/tide-actions";
+import { useToast } from "@/components/toast";
 import { formatUsdc, shortAddress } from "@/lib/utils";
-
-type ActionState =
-  | { kind: "idle" }
-  | { kind: "submitting" }
-  | { kind: "success"; signature: string }
-  | { kind: "error"; message: string };
 
 export default function AdminPage() {
   const { connection } = useConnection();
   const wallet = useWallet();
+  const toast = useToast();
   const { pool, poolPubkey, loading: poolLoading } = usePool();
   const { window: currentWindow, windowPubkey } = useCurrentWindow();
 
-  const [poolState, setPoolState] = useState<ActionState>({ kind: "idle" });
-  const [windowState, setWindowState] = useState<ActionState>({ kind: "idle" });
-  const [aggregateState, setAggregateState] = useState<ActionState>({
-    kind: "idle",
-  });
-  const [swapState, setSwapState] = useState<ActionState>({ kind: "idle" });
+  const [busyAction, setBusyAction] = useState<
+    "init_pool" | "init_window" | "trigger" | "swap" | null
+  >(null);
 
-  const handleInitPool = async () => {
-    setPoolState({ kind: "submitting" });
-    const result = await submitInitPool(connection, wallet, {});
-    setPoolState(
-      result.ok
-        ? { kind: "success", signature: result.signature }
-        : { kind: "error", message: result.error },
-    );
+  const runAction = async (
+    name: "init_pool" | "init_window" | "trigger" | "swap",
+    label: string,
+    runner: () => Promise<{ ok: boolean; signature?: string; error?: string }>,
+  ) => {
+    setBusyAction(name);
+    try {
+      const result = await runner();
+      if (result.ok && result.signature) {
+        toast.success(`${label} confirmed`, { explorerSig: result.signature });
+      } else {
+        toast.error(result.error ?? `${label} failed`);
+      }
+    } finally {
+      setBusyAction(null);
+    }
   };
 
-  const handleInitWindow = async () => {
+  const handleInitPool = () =>
+    runAction("init_pool", "Pool initialized", () =>
+      submitInitPool(connection, wallet, {}),
+    );
+
+  const handleInitWindow = () => {
     if (!pool) {
-      setWindowState({
-        kind: "error",
-        message: "Pool not initialized. Run init_pool first.",
-      });
+      toast.error("Pool not initialized. Run init_pool first.");
       return;
     }
-    setWindowState({ kind: "submitting" });
-    const result = await submitInitWindow(
-      connection,
-      wallet,
-      poolPubkey,
-      pool.windowCounter,
-    );
-    setWindowState(
-      result.ok
-        ? { kind: "success", signature: result.signature }
-        : { kind: "error", message: result.error },
+    return runAction("init_window", "Window opened", () =>
+      submitInitWindow(connection, wallet, poolPubkey, pool.windowCounter),
     );
   };
 
-  const handleTriggerAggregate = async () => {
+  const handleTriggerAggregate = () => {
     if (!windowPubkey) {
-      setAggregateState({ kind: "error", message: "No active window." });
+      toast.error("No active window.");
       return;
     }
-    setAggregateState({ kind: "submitting" });
-    const result = await submitTriggerAggregate(
-      connection,
-      wallet,
-      poolPubkey,
-      windowPubkey,
-    );
-    setAggregateState(
-      result.ok
-        ? { kind: "success", signature: result.signature }
-        : { kind: "error", message: result.error },
+    return runAction("trigger", "Aggregate triggered", () =>
+      submitTriggerAggregate(connection, wallet, poolPubkey, windowPubkey),
     );
   };
 
-  const handleExecuteSwap = async () => {
+  const handleExecuteSwap = () => {
     if (!windowPubkey || !currentWindow) {
-      setSwapState({ kind: "error", message: "No active window." });
+      toast.error("No active window.");
       return;
     }
-    setSwapState({ kind: "submitting" });
-    const result = await submitExecuteSwap(connection, wallet, {
-      poolPda: poolPubkey,
-      windowPda: windowPubkey,
-      windowNumber: currentWindow.windowNumber,
-      totalCommittedUsdc: currentWindow.totalCommittedUsdc,
-      minAcquiredAmount: 1n,
-      slippageBps: 50,
-    });
-    setSwapState(
-      result.ok
-        ? { kind: "success", signature: result.signature }
-        : { kind: "error", message: result.error },
+    return runAction("swap", "Swap executed", () =>
+      submitExecuteSwap(connection, wallet, {
+        poolPda: poolPubkey,
+        windowPda: windowPubkey,
+        windowNumber: currentWindow.windowNumber,
+        totalCommittedUsdc: currentWindow.totalCommittedUsdc,
+        minAcquiredAmount: 1n,
+        slippageBps: 50,
+      }),
     );
   };
 
@@ -267,7 +248,7 @@ export default function AdminPage() {
               ? "Pool already exists"
               : undefined
         }
-        state={poolState}
+        submitting={busyAction === "init_pool"}
         onClick={handleInitPool}
       />
 
@@ -287,7 +268,7 @@ export default function AdminPage() {
               ? "Pool not initialized"
               : undefined
         }
-        state={windowState}
+        submitting={busyAction === "init_window"}
         onClick={handleInitWindow}
       />
 
@@ -301,7 +282,7 @@ export default function AdminPage() {
         buttonLabel="Trigger Aggregate"
         disabled={triggerAggregateDisabled}
         disabledReason={triggerAggregateReason}
-        state={aggregateState}
+        submitting={busyAction === "trigger"}
         onClick={handleTriggerAggregate}
       />
 
@@ -323,7 +304,7 @@ export default function AdminPage() {
                 ? `Window not Aggregating (status: ${windowStatusLabel})`
                 : undefined
         }
-        state={swapState}
+        submitting={busyAction === "swap"}
         onClick={handleExecuteSwap}
       />
     </main>
@@ -336,7 +317,7 @@ function ActionCard({
   buttonLabel,
   disabled,
   disabledReason,
-  state,
+  submitting,
   onClick,
 }: {
   title: string;
@@ -344,7 +325,7 @@ function ActionCard({
   buttonLabel: string;
   disabled: boolean;
   disabledReason?: string;
-  state: ActionState;
+  submitting: boolean;
   onClick: () => void | Promise<void>;
 }) {
   return (
@@ -361,10 +342,7 @@ function ActionCard({
         >
           {title}
         </h2>
-        {state.kind === "success" && (
-          <span className="badge badge--good">confirmed</span>
-        )}
-        {state.kind === "submitting" && (
+        {submitting && (
           <span className="badge badge--accent">
             <span className="dot dot--live" /> submitting
           </span>
@@ -377,39 +355,6 @@ function ActionCard({
         {description}
       </p>
 
-      {state.kind === "success" && (
-        <p
-          className="tiny"
-          style={{
-            marginTop: 12,
-            marginBottom: 0,
-            color: "var(--good)",
-          }}
-        >
-          ✓ Confirmed.{" "}
-          <a
-            href={`https://explorer.solana.com/tx/${state.signature}?cluster=devnet`}
-            target="_blank"
-            rel="noreferrer"
-            style={{ textDecoration: "underline" }}
-          >
-            View on Solana Explorer
-          </a>
-        </p>
-      )}
-      {state.kind === "error" && (
-        <p
-          className="tiny"
-          style={{
-            marginTop: 12,
-            marginBottom: 0,
-            color: "var(--bad)",
-          }}
-        >
-          ✗ {state.message}
-        </p>
-      )}
-
       <div
         className="flex"
         style={{
@@ -421,11 +366,12 @@ function ActionCard({
       >
         <button
           onClick={() => void onClick()}
-          disabled={disabled || state.kind === "submitting"}
+          disabled={disabled || submitting}
           className="btn btn--primary"
           title={disabledReason}
         >
-          {state.kind === "submitting" ? "Submitting…" : buttonLabel}
+          {submitting && <span className="spinner spinner--sm" />}
+          {submitting ? "Submitting…" : buttonLabel}
         </button>
         {disabled && disabledReason && (
           <span className="tiny mute2">— {disabledReason}</span>

@@ -711,6 +711,127 @@ textarea {
   }
 }
 
+/* ===================== Spinner ===================== */
+
+.spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  vertical-align: -2px;
+}
+.spinner--sm {
+  width: 11px;
+  height: 11px;
+  border-width: 1.5px;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ===================== Toast ===================== */
+
+.toast-wrap {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 380px;
+  pointer-events: none;
+}
+.toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 16px;
+  background: var(--bg-3);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  font-size: 13.5px;
+  color: var(--text-0);
+  cursor: pointer;
+  text-align: left;
+  animation: toast-in 0.25s ease-out;
+  transition: border-color 0.15s;
+}
+.toast:hover {
+  border-color: var(--text-3);
+}
+.toast--success {
+  border-left: 3px solid var(--good);
+}
+.toast--error {
+  border-left: 3px solid var(--bad);
+}
+.toast--info {
+  border-left: 3px solid var(--accent);
+}
+.toast__icon {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 600;
+}
+.toast--success .toast__icon {
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--good);
+}
+.toast--error .toast__icon {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--bad);
+}
+.toast--info .toast__icon {
+  background: var(--accent-glow);
+  color: var(--accent);
+}
+.toast__link {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-style: dotted;
+}
+.toast__link:hover {
+  color: var(--text-0);
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@media (max-width: 600px) {
+  .toast-wrap {
+    top: auto;
+    bottom: 16px;
+    left: 16px;
+    right: 16px;
+    max-width: none;
+  }
+}
+
 /* ===================== Modal ===================== */
 
 .modal-bg {

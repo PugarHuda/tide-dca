@@ -4,39 +4,36 @@ import { useState } from "react";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 
 import { submitSetupDcaPosition } from "@/lib/tide-actions";
+import { useToast } from "@/components/toast";
 
 /**
- * DCA setup form, restyled with the design's class system. Functional
- * behavior unchanged: submits setup_dca_position via lib/tide-actions.ts.
+ * DCA setup form. Submits setup_dca_position via lib/tide-actions.ts;
+ * surfaces success / error through the global toast system instead of
+ * inline text so users notice tx confirmations even if they've scrolled.
  */
 export function DcaSetupForm() {
   const { connection } = useConnection();
   const wallet = useWallet();
+  const toast = useToast();
 
   const [amountUsdc, setAmountUsdc] = useState("50");
   const [windowMinutes, setWindowMinutes] = useState("60");
   const [maxSlippagePct, setMaxSlippagePct] = useState("1");
   const [submitting, setSubmitting] = useState(false);
-  const [result, setResult] = useState<
-    | { kind: "idle" }
-    | { kind: "success"; signature: string }
-    | { kind: "error"; message: string }
-  >({ kind: "idle" });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
-    setResult({ kind: "idle" });
     try {
       const out = await submitSetupDcaPosition(connection, wallet, {
         amountPerWindowUsdc: parseFloat(amountUsdc),
         maxSlippageBps: Math.round(parseFloat(maxSlippagePct) * 100),
       });
-      setResult(
-        out.ok
-          ? { kind: "success", signature: out.signature }
-          : { kind: "error", message: out.error },
-      );
+      if (out.ok) {
+        toast.success("DCA position created", { explorerSig: out.signature });
+      } else {
+        toast.error(out.error);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -229,37 +226,13 @@ export function DcaSetupForm() {
         </div>
       </div>
 
-      {result.kind === "success" && (
-        <div
-          className="badge badge--good"
-          style={{ padding: "10px 14px", fontSize: 13 }}
-        >
-          ✓ DCA position created.{" "}
-          <a
-            style={{ textDecoration: "underline" }}
-            href={`https://explorer.solana.com/tx/${result.signature}?cluster=devnet`}
-            target="_blank"
-            rel="noreferrer"
-          >
-            View on Solana Explorer
-          </a>
-        </div>
-      )}
-      {result.kind === "error" && (
-        <div
-          className="badge badge--warn"
-          style={{ padding: "10px 14px", fontSize: 13 }}
-        >
-          ✗ {result.message}
-        </div>
-      )}
-
       <button
         type="submit"
         className="btn btn--primary btn--lg"
         disabled={submitting || !wallet.publicKey}
         style={{ width: "100%" }}
       >
+        {submitting && <span className="spinner" />}
         {submitting
           ? "Submitting transaction…"
           : !wallet.publicKey

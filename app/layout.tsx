@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 
 import { Providers } from "@/lib/providers";
 import { Nav } from "@/components/nav";
+import { ToastProvider } from "@/components/toast";
 import "./globals.css";
 
 const geist = Geist({
@@ -45,10 +46,12 @@ export default function RootLayout({
     <html lang="en" className={`${geist.variable} ${geistMono.variable}`}>
       <body>
         <Providers>
-          <div className="shell">
-            <Nav />
-            {children}
-          </div>
+          <ToastProvider>
+            <div className="shell">
+              <Nav />
+              {children}
+            </div>
+          </ToastProvider>
         </Providers>
       </body>
     </html>

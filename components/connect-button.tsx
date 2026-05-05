@@ -29,7 +29,7 @@
  * — no styled-jsx so the modal paints styled on first open.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   useWallet,
@@ -52,18 +52,14 @@ export function ConnectButton() {
   // `mounted` gate avoids hydration mismatch — wallet-adapter restores
   // sessions from storage in a post-mount effect.
   if (mounted && wallet.publicKey) {
+    const addr = wallet.publicKey.toBase58();
+    const short = `${addr.slice(0, 4)}…${addr.slice(-4)}`;
     return (
-      <button
-        className="btn btn--ghost btn--sm"
-        onClick={() => void wallet.disconnect()}
-        title="Disconnect"
-      >
-        <span className="dot dot--good" />
-        <span className="mono">
-          {wallet.publicKey.toBase58().slice(0, 4)}…
-          {wallet.publicKey.toBase58().slice(-4)}
-        </span>
-      </button>
+      <AccountMenu
+        label={short}
+        fullAddress={addr}
+        onDisconnect={() => void wallet.disconnect()}
+      />
     );
   }
 
@@ -74,18 +70,11 @@ export function ConnectButton() {
       privy.user.email?.address ??
       (addr ? `${addr.slice(0, 4)}…${addr.slice(-4)}` : "Connected");
     return (
-      <button
-        className="btn btn--ghost btn--sm"
-        onClick={() => privy.logout()}
-        title="Sign out"
-      >
-        <span className="dot dot--good" />
-        <span
-          style={{ maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis" }}
-        >
-          {label}
-        </span>
-      </button>
+      <AccountMenu
+        label={label}
+        fullAddress={addr ?? null}
+        onDisconnect={() => privy.logout()}
+      />
     );
   }
 
@@ -310,6 +299,119 @@ function ConnectModal({
           funds outside its own escrow PDAs.
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Connected-state nav button — shows a green dot + truncated label, opens
+ * a small menu on click with "copy address", "view on Solana Explorer",
+ * and "disconnect". Closing on outside-click + Escape.
+ */
+function AccountMenu({
+  label,
+  fullAddress,
+  onDisconnect,
+}: {
+  label: string;
+  fullAddress: string | null;
+  onDisconnect: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const handleCopy = async () => {
+    if (!fullAddress) return;
+    try {
+      await navigator.clipboard.writeText(fullAddress);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1400);
+    } catch {
+      // ignore — older browsers / blocked permissions
+    }
+  };
+
+  return (
+    <div ref={wrapRef} className="acct">
+      <button
+        className="btn btn--ghost btn--sm"
+        onClick={() => setOpen((o) => !o)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+      >
+        <span className="dot dot--good" />
+        <span
+          style={{
+            maxWidth: 160,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            fontFamily: fullAddress ? "var(--font-mono)" : undefined,
+          }}
+        >
+          {label}
+        </span>
+        <span className="mute2" style={{ marginLeft: 4, fontSize: 10 }}>
+          ▾
+        </span>
+      </button>
+
+      {open && (
+        <div className="acct__menu" role="menu">
+          {fullAddress && (
+            <div className="acct__addr">
+              <span className="tiny mute2">Connected wallet</span>
+              <span className="mono" style={{ fontSize: 12 }}>
+                {fullAddress.slice(0, 8)}…{fullAddress.slice(-8)}
+              </span>
+            </div>
+          )}
+          {fullAddress && (
+            <button className="acct__item" onClick={() => void handleCopy()}>
+              <span>{copied ? "✓ Copied" : "Copy address"}</span>
+            </button>
+          )}
+          {fullAddress && (
+            <a
+              className="acct__item"
+              href={`https://explorer.solana.com/address/${fullAddress}?cluster=devnet`}
+              target="_blank"
+              rel="noreferrer"
+              role="menuitem"
+              onClick={() => setOpen(false)}
+            >
+              <span>View on Solana Explorer ↗</span>
+            </a>
+          )}
+          <div className="acct__sep" />
+          <button
+            className="acct__item acct__item--danger"
+            onClick={() => {
+              setOpen(false);
+              onDisconnect();
+            }}
+            role="menuitem"
+          >
+            <span>Disconnect</span>
+          </button>
+        </div>
+      )}
     </div>
   );
 }

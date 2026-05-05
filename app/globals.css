@@ -738,6 +738,63 @@ textarea {
   box-shadow: 0 30px 80px rgba(0, 0, 0, 0.7);
 }
 
+/* ===================== Account menu (connected nav button) ===================== */
+
+.acct {
+  position: relative;
+}
+.acct__menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 240px;
+  background: var(--bg-2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+  padding: 6px;
+  z-index: 50;
+  animation: risefade 0.15s ease-out;
+}
+.acct__addr {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px 12px;
+  border-bottom: 1px solid var(--line-soft);
+  margin-bottom: 4px;
+}
+.acct__item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  text-align: left;
+  padding: 9px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--text-1);
+  background: transparent;
+  border: 0;
+  transition: background 0.12s, color 0.12s;
+  cursor: pointer;
+}
+.acct__item:hover {
+  background: var(--bg-3);
+  color: var(--text-0);
+}
+.acct__item--danger {
+  color: var(--bad);
+}
+.acct__item--danger:hover {
+  background: rgba(239, 68, 68, 0.08);
+  color: #ff7b7b;
+}
+.acct__sep {
+  height: 1px;
+  background: var(--line-soft);
+  margin: 4px 0;
+}
+
 /* ===================== Connect modal options ===================== */
 
 .connect-opt {

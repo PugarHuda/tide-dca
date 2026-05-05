@@ -3,23 +3,24 @@
 /**
  * Tide app-level providers.
  *
- * Two complementary auth surfaces, intentionally separated:
+ * Two complementary auth surfaces, intentionally separated at the connector
+ * layer (the nav button unifies them at the UI layer):
  *
  *   1. @solana/wallet-adapter — handles existing Solana wallets (Phantom,
- *      Solflare, Backpack) via the Wallet Standard registry. This is the
- *      crypto-native path; ConnectButton in the nav uses WalletMultiButton.
+ *      Solflare, Backpack) via the Wallet Standard registry. We bring our
+ *      own modal in components/connect-button.tsx and skip
+ *      @solana/wallet-adapter-react-ui entirely (its styles clash with the
+ *      design system; we only need the headless hooks).
  *
  *   2. Privy — handles email/social login for users who don't have a
  *      Solana wallet yet. Privy auto-creates an embedded Solana wallet on
  *      first login. PrivyEmbeddedBridge publishes that wallet's pubkey
  *      into TideWalletContext so useTideWallet() can return it.
  *
- * IMPORTANT: we deliberately do NOT pass `externalWallets.solana.connectors`
- * to Privy. That config registers Privy as a Wallet Standard connector,
- * which causes "Privy" to appear in WalletMultiButton's modal alongside
- * Phantom — picking it routes to Privy's own modal which historically
- * fell back to Ethereum mode mid-session. Privy is for embedded wallets
- * here, period; external wallet handling stays with wallet-adapter.
+ * We deliberately do NOT pass `externalWallets.solana.connectors` to
+ * Privy — that registers Privy as a Wallet Standard connector and causes
+ * "Privy" to appear inside the wallet adapter modal alongside Phantom.
+ * Privy is for embedded-only here.
  */
 
 import { useMemo, type ReactNode } from "react";
@@ -27,9 +28,7 @@ import {
   ConnectionProvider,
   WalletProvider,
 } from "@solana/wallet-adapter-react";
-import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
 import { PrivyProvider } from "@privy-io/react-auth";
-import "@solana/wallet-adapter-react-ui/styles.css";
 
 import { CURRENT_NETWORK, RPC_URLS } from "./constants";
 import { PrivyEmbeddedBridge } from "./privy-bridge";
@@ -43,7 +42,7 @@ export function Providers({ children }: { children: ReactNode }) {
   const inner = (
     <ConnectionProvider endpoint={endpoint}>
       <WalletProvider wallets={wallets} autoConnect>
-        <WalletModalProvider>{children}</WalletModalProvider>
+        {children}
       </WalletProvider>
     </ConnectionProvider>
   );
@@ -60,7 +59,6 @@ export function Providers({ children }: { children: ReactNode }) {
           accentColor: "#06b6d4",
           walletChainType: "solana-only",
         },
-        // Email/social only — wallet connection is wallet-adapter's job.
         loginMethods: ["email", "google", "twitter"],
         embeddedWallets: {
           ethereum: { createOnLogin: "off" },

@@ -235,35 +235,6 @@ function ConnectModal({
           </div>
         </div>
       </div>
-      <style jsx global>{`
-        .connect-opt {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          padding: 14px;
-          border: 1px solid var(--line-2);
-          background: var(--bg-1);
-          border-radius: 10px;
-          transition: border-color 0.15s, background 0.15s;
-        }
-        .connect-opt:hover {
-          border-color: var(--accent-line);
-          background: var(--bg-3);
-        }
-        .connect-opt__icon {
-          width: 36px;
-          height: 36px;
-          border-radius: 8px;
-          display: grid;
-          place-items: center;
-          background: var(--bg-2);
-          overflow: hidden;
-        }
-        .connect-opt__icon img {
-          width: 24px;
-          height: 24px;
-        }
-      `}</style>
     </>
   );
 }

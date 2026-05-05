@@ -85,9 +85,7 @@ export default function DashboardPage() {
     );
   }
   if (poolLoading) {
-    return (
-      <EmptyState title="Loading pool…" body="Fetching on-chain state." />
-    );
+    return <DashboardSkeleton />;
   }
   if (!pool) {
     return (
@@ -248,12 +246,8 @@ export default function DashboardPage() {
       )}
 
       <section
-        className="grid"
-        style={{
-          gridTemplateColumns: "1fr 1fr",
-          gap: 18,
-          marginBottom: 28,
-        }}
+        className="grid grid--2"
+        style={{ marginBottom: 28 }}
       >
         {currentWindow ? (
           <WindowStatusCard
@@ -484,6 +478,66 @@ function ActionBanner({
         </p>
       )}
     </section>
+  );
+}
+
+function DashboardSkeleton() {
+  return (
+    <main className="page page--wide">
+      <header style={{ marginBottom: 36 }}>
+        <div className="skeleton skeleton--badge" style={{ marginBottom: 12 }} />
+        <div
+          className="skeleton skeleton--big"
+          style={{ width: "60%", height: 36, marginBottom: 8 }}
+        />
+        <div
+          className="skeleton skeleton--block"
+          style={{ width: "40%", height: 14 }}
+        />
+      </header>
+      <section
+        className="grid grid--4"
+        style={{ marginBottom: 28, gap: 16 }}
+      >
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className="card" style={{ padding: 18 }}>
+            <div
+              className="skeleton skeleton--block"
+              style={{ width: "60%", height: 11, marginBottom: 10 }}
+            />
+            <div
+              className="skeleton skeleton--big"
+              style={{ width: "75%", height: 24 }}
+            />
+          </div>
+        ))}
+      </section>
+      <section
+        className="grid"
+        style={{ gridTemplateColumns: "1fr 1fr", gap: 18 }}
+      >
+        {[0, 1].map((i) => (
+          <div key={i} className="card">
+            <div
+              className="skeleton skeleton--block"
+              style={{ width: "40%", height: 12, marginBottom: 18 }}
+            />
+            <div
+              className="skeleton skeleton--big"
+              style={{ width: "100%", height: 38, marginBottom: 14 }}
+            />
+            <div
+              className="skeleton skeleton--block"
+              style={{ width: "100%", marginBottom: 8 }}
+            />
+            <div
+              className="skeleton skeleton--block"
+              style={{ width: "80%" }}
+            />
+          </div>
+        ))}
+      </section>
+    </main>
   );
 }
 

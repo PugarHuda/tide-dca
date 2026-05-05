@@ -102,13 +102,7 @@ export function DcaSetupForm() {
         </div>
       </div>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: 16,
-        }}
-      >
+      <div className="grid grid--2" style={{ gap: 16 }}>
         <div className="field">
           <label className="field__label">Amount per window</label>
           <div style={{ position: "relative" }}>
@@ -200,13 +194,7 @@ export function DcaSetupForm() {
           <span className="badge badge--accent">{poolSlippageEstimate}% pool slip</span>
         </div>
         <div className="tideline" />
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: 16,
-          }}
-        >
+        <div className="grid grid--2" style={{ gap: 16 }}>
           <div>
             <div className="tiny mute2">Solo slippage</div>
             <div

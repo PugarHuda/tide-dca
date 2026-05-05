@@ -250,3 +250,64 @@ export function useUserIntent(windowPubkey: PublicKey | null): {
 
   return { intent, intentPubkey, loading };
 }
+
+/**
+ * Fetch every settled Window account for the canonical pool, ordered by
+ * window number ascending. Settled = status >= 2 (Distributed). Used to
+ * build the cumulative savings chart from real history.
+ *
+ * Strategy: pool.windowCounter is the next-window index, so we know there
+ * are exactly that many Window PDAs ever derived. Batch them into a single
+ * getMultipleAccountsInfo RPC call (max ~100 keys per call — Tide will
+ * surely settle <100 windows before mainnet); decode in place.
+ */
+export function useWindowHistory(): {
+  windows: Window[];
+  loading: boolean;
+} {
+  const { connection } = useConnection();
+  const { pool, poolPubkey } = usePool();
+  const [windows, setWindows] = useState<Window[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const counter = pool ? Number(pool.windowCounter) : 0;
+
+  useEffect(() => {
+    if (!pool || counter === 0) {
+      setWindows([]);
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+
+    const pdas = Array.from({ length: counter }, (_, i) =>
+      findWindowPda(poolPubkey, BigInt(i))[0],
+    );
+
+    connection
+      .getMultipleAccountsInfo(pdas, "confirmed")
+      .then((infos) => {
+        if (cancelled) return;
+        const decoded: Window[] = [];
+        infos.forEach((info) => {
+          if (!info) return;
+          try {
+            decoded.push(decodeWindow(info.data as Buffer));
+          } catch {
+            // skip malformed; happens if a window account was closed
+          }
+        });
+        // Only the ones that actually settled (status >= 2)
+        setWindows(decoded.filter((w) => w.status >= 2));
+      })
+      .catch(() => !cancelled && setWindows([]))
+      .finally(() => !cancelled && setLoading(false));
+
+    return () => {
+      cancelled = true;
+    };
+  }, [connection, poolPubkey, counter, pool]);
+
+  return { windows, loading };
+}

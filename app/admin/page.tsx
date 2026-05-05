@@ -9,7 +9,7 @@
  * don't button-mash through reverts.
  */
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { PublicKey } from "@solana/web3.js";
 
@@ -179,9 +179,27 @@ export default function AdminPage() {
         </div>
 
         {poolLoading ? (
-          <p className="muted" style={{ fontSize: 14, margin: 0 }}>
-            Loading…
-          </p>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "max-content 1fr",
+              rowGap: 10,
+              columnGap: 24,
+            }}
+          >
+            {[0, 1, 2, 3, 4].map((i) => (
+              <Fragment key={i}>
+                <div
+                  className="skeleton skeleton--block"
+                  style={{ width: 100, height: 12 }}
+                />
+                <div
+                  className="skeleton skeleton--block"
+                  style={{ width: 180, height: 12 }}
+                />
+              </Fragment>
+            ))}
+          </div>
         ) : pool ? (
           <dl
             style={{

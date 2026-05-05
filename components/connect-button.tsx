@@ -5,18 +5,32 @@
  * detected Solana wallet (Phantom, Solflare, Backpack, …) plus a Privy email
  * row when NEXT_PUBLIC_PRIVY_APP_ID is set.
  *
- * Connection flow uses the canonical wallet-adapter pattern:
- *   1. User clicks a wallet row → `select(walletName)` updates context.
- *   2. A useEffect watching `wallet` calls `connect()` once the new wallet
- *      is staged. Calling `adapter.connect()` directly here would race the
- *      context update and silently no-op.
- *   3. wallet-adapter handles the wallet popup (Phantom etc).
+ * Two non-obvious wires worth knowing about:
+ *
+ *   • Modal is portaled to document.body via createPortal because the parent
+ *     <nav> has `backdrop-filter: blur` set in globals.css, which establishes
+ *     a containing block for fixed-positioned descendants. Without the
+ *     portal the .modal-bg "fixed inset:0" is clamped to the nav box,
+ *     producing the "melebar di navbar" failure mode.
+ *
+ *   • A `mounted` flag gates rendering of any wallet/Privy-restored state
+ *     until after hydration. wallet-adapter's autoConnect can rehydrate a
+ *     prior session, which makes the first client render diverge from the
+ *     server HTML (React error #418, hydration text mismatch). Returning
+ *     the inert "Connect wallet" button on the very first paint keeps the
+ *     two trees identical.
+ *
+ *   • Connection flow uses the canonical wallet-adapter pattern: pick a
+ *     wallet → `select(name)` → a useEffect calls `connect()` once the
+ *     freshly-selected wallet appears in context. Calling adapter.connect()
+ *     synchronously after select() races the context update.
  *
  * All visual styling lives in app/globals.css under "Connect modal options"
- * — no styled-jsx so the modal paints styled on first open (no FOUC).
+ * — no styled-jsx so the modal paints styled on first open.
  */
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   useWallet,
   type Wallet,
@@ -32,6 +46,8 @@ export function ConnectButton() {
   const privy = PRIVY_APP_ID ? usePrivy() : null;
   const [modalOpen, setModalOpen] = useState(false);
   const [pendingPick, setPendingPick] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   // After a user picks a wallet from our modal, select() updates context;
   // this effect calls connect() on the next render when wallet is ready.
@@ -55,7 +71,9 @@ export function ConnectButton() {
   }, [pendingPick, wallet]);
 
   // ── Connected via wallet-adapter ──
-  if (wallet.publicKey) {
+  // `mounted` gate avoids hydration mismatch — wallet-adapter restores
+  // sessions from storage in a post-mount effect.
+  if (mounted && wallet.publicKey) {
     return (
       <button
         className="btn btn--ghost btn--sm"
@@ -72,7 +90,7 @@ export function ConnectButton() {
   }
 
   // ── Connected via Privy embedded ──
-  if (privy?.authenticated && privy.user) {
+  if (mounted && privy?.authenticated && privy.user) {
     const addr = privy.user.wallet?.address;
     const label =
       privy.user.email?.address ??
@@ -93,6 +111,27 @@ export function ConnectButton() {
     );
   }
 
+  const modal = modalOpen ? (
+    <ConnectModal
+      wallets={wallet.wallets}
+      connecting={wallet.connecting}
+      onPickWallet={(w) => {
+        wallet.select(w.adapter.name);
+        setPendingPick(w.adapter.name);
+        setModalOpen(false);
+      }}
+      onPickPrivy={
+        privy
+          ? () => {
+              setModalOpen(false);
+              privy.login();
+            }
+          : null
+      }
+      onClose={() => setModalOpen(false)}
+    />
+  ) : null;
+
   return (
     <>
       <button
@@ -101,26 +140,9 @@ export function ConnectButton() {
       >
         Connect wallet
       </button>
-      {modalOpen && (
-        <ConnectModal
-          wallets={wallet.wallets}
-          connecting={wallet.connecting}
-          onPickWallet={(w) => {
-            wallet.select(w.adapter.name);
-            setPendingPick(w.adapter.name);
-            setModalOpen(false);
-          }}
-          onPickPrivy={
-            privy
-              ? () => {
-                  setModalOpen(false);
-                  privy.login();
-                }
-              : null
-          }
-          onClose={() => setModalOpen(false)}
-        />
-      )}
+      {/* Portal so the fixed-position modal escapes the nav's backdrop-filter
+          containing block. Only mount after hydration to keep SSR markup stable. */}
+      {mounted && modal && createPortal(modal, document.body)}
     </>
   );
 }

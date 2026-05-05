@@ -711,6 +711,33 @@ textarea {
   }
 }
 
+/* ===================== Modal ===================== */
+
+.modal-bg {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  /* Above the sticky nav (z-index: 30) and any third-party widget overlays. */
+  z-index: 9999;
+  display: grid;
+  place-items: center;
+  animation: risefade 0.2s ease-out;
+  padding: 20px;
+}
+.modal {
+  background: var(--bg-2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-lg);
+  padding: 28px;
+  max-width: 480px;
+  width: 100%;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.7);
+}
+
 /* ===================== Connect modal options ===================== */
 
 .connect-opt {

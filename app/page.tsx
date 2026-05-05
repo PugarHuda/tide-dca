@@ -4,17 +4,25 @@
  * Landing page — atmospheric ocean palette, hero with live mini-dashboard,
  * how-it-works, flow diagram, comparison, social proof, final CTA, footer.
  *
- * Ported from claude.ai/design handoff at .designs/design-A/tide/project/.
- * All page-specific CSS lives at the bottom in a single <style> tag so the
- * design's class names port over verbatim. Globals + tokens are in
- * app/globals.css.
+ * Real on-chain data wired through usePool() + useCurrentWindow():
+ *   - Hero eyebrow shows real participant count for the active window
+ *   - HeroPanel pulls real countdown / pool size / participants
+ *   - Stats strip reads pool.totalVolumeProcessed + pool.windowCounter
+ *   - When values are zero (early devnet stage), placeholders kick in so
+ *     "$0.00" doesn't replace what was a hero stat
+ *
+ * Flow diagram + Comparison cards keep illustrative numbers — they explain
+ * the mechanism, not Tide's actual traction.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 
+import { useCurrentWindow, usePool } from "@/lib/hooks";
+import { CURRENT_NETWORK } from "@/lib/constants";
+import { formatUsdc } from "@/lib/utils";
+
 const WINDOW_DURATION_S = 3600;
-const PARTICIPANTS = 124;
 
 const FAKE_PUBKEYS = [
   "8x9Yw…3Pq2",
@@ -35,24 +43,52 @@ function fmtHms(totalSec: number): string {
   return [h, m, s].map((v) => String(v).padStart(2, "0")).join(":");
 }
 
-export default function LandingPage() {
-  // Simulated countdown — drives the HeroPanel without needing real chain data.
-  const [openRemainingS, setOpenRemainingS] = useState(WINDOW_DURATION_S - 1820);
+/** Format a usdc-lamport bigint as a compact "$1.2M" / "$48.2K" / "$0" string. */
+function fmtUsdcCompact(lamports: bigint): string {
+  const dollars = Number(lamports) / 1_000_000;
+  if (dollars >= 1_000_000) return `$${(dollars / 1_000_000).toFixed(1)}M`;
+  if (dollars >= 1_000) return `$${(dollars / 1_000).toFixed(1)}K`;
+  if (dollars >= 1) return `$${dollars.toFixed(0)}`;
+  return "$0";
+}
 
+export default function LandingPage() {
+  const { pool } = usePool();
+  const { window: currentWindow } = useCurrentWindow();
+
+  // Window countdown — real if a window is active, otherwise simulated so the
+  // hero panel still ticks visually for first-time visitors with no live state.
+  const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
   useEffect(() => {
-    const id = setInterval(() => {
-      setOpenRemainingS((s) => (s <= 1 ? WINDOW_DURATION_S : s - 1));
-    }, 1000);
+    const id = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 1000);
     return () => clearInterval(id);
   }, []);
 
-  const fillPct = (1 - openRemainingS / WINDOW_DURATION_S) * 100;
+  const realRemaining = currentWindow
+    ? Math.max(0, Number(currentWindow.endTs) - now)
+    : 0;
+  const simRemaining = WINDOW_DURATION_S - (now % WINDOW_DURATION_S);
+  const openRemainingS = currentWindow ? realRemaining : simRemaining;
+  const windowDuration = currentWindow
+    ? Math.max(1, Number(currentWindow.endTs) - Number(currentWindow.startTs))
+    : WINDOW_DURATION_S;
+  const fillPct = (1 - openRemainingS / windowDuration) * 100;
 
   return (
     <>
       <main className="landing">
-        <Hero openRemainingS={openRemainingS} fillPct={fillPct} />
-        <Stats />
+        <Hero
+          openRemainingS={openRemainingS}
+          fillPct={fillPct}
+          participantCount={currentWindow?.intentCount ?? 0}
+          poolSizeLamports={currentWindow?.totalCommittedUsdc ?? 0n}
+          windowNumber={currentWindow?.windowNumber ?? 0n}
+          isLive={!!currentWindow}
+        />
+        <Stats
+          totalVolumeLamports={pool?.totalVolumeProcessed ?? 0n}
+          windowCounter={pool?.windowCounter ?? 0n}
+        />
         <HowItWorks />
         <Comparison />
         <Proof />
@@ -69,18 +105,31 @@ export default function LandingPage() {
 function Hero({
   openRemainingS,
   fillPct,
+  participantCount,
+  poolSizeLamports,
+  windowNumber,
+  isLive,
 }: {
   openRemainingS: number;
   fillPct: number;
+  participantCount: number;
+  poolSizeLamports: bigint;
+  windowNumber: bigint;
+  isLive: boolean;
 }) {
+  const eyebrowText = isLive
+    ? participantCount > 0
+      ? `Live on Solana ${CURRENT_NETWORK} · ${participantCount} ${participantCount === 1 ? "depositor" : "depositors"} this window`
+      : `Live on Solana ${CURRENT_NETWORK} · early access — first window open`
+    : `Solana ${CURRENT_NETWORK} · awaiting first window`;
+
   return (
     <section className="hero">
       <CurrentLines count={9} opacity={0.08} />
       <div className="hero__inner">
         <div className="hero__copy">
           <span className="eyebrow">
-            <span className="dot dot--live" /> Live on Solana mainnet ·{" "}
-            {PARTICIPANTS} active depositors
+            <span className="dot dot--live" /> {eyebrowText}
           </span>
           <h1 className="hero__h">
             DCA without MEV.
@@ -118,14 +167,21 @@ function Hero({
             </a>
           </div>
           <div className="hero__trust">
-            <TrustItem label="Audited by" v="OtterSec" />
-            <TrustItem label="MPC layer" v="Arcium" />
+            <TrustItem label="MPC layer" v="Arcium (planned)" />
             <TrustItem label="Routing" v="Jupiter v6" />
             <TrustItem label="Wallet" v="Phantom · Privy" />
+            <TrustItem label="Network" v={`Solana ${CURRENT_NETWORK}`} />
           </div>
         </div>
 
-        <HeroPanel openRemainingS={openRemainingS} fillPct={fillPct} />
+        <HeroPanel
+          openRemainingS={openRemainingS}
+          fillPct={fillPct}
+          participantCount={participantCount}
+          poolSizeLamports={poolSizeLamports}
+          windowNumber={windowNumber}
+          isLive={isLive}
+        />
       </div>
     </section>
   );
@@ -143,21 +199,43 @@ function TrustItem({ label, v }: { label: string; v: string }) {
 function HeroPanel({
   openRemainingS,
   fillPct,
+  participantCount,
+  poolSizeLamports,
+  windowNumber,
+  isLive,
 }: {
   openRemainingS: number;
   fillPct: number;
+  participantCount: number;
+  poolSizeLamports: bigint;
+  windowNumber: bigint;
+  isLive: boolean;
 }) {
+  const poolLabel = isLive
+    ? formatUsdc(poolSizeLamports)
+    : "—";
+  const participantLabel = isLive
+    ? participantCount.toString()
+    : "—";
+
   return (
     <div className="hero-panel">
       <div className="hero-panel__head">
         <span className="badge badge--accent">
-          <span className="dot dot--live" /> Window #4218 · Open
+          <span className="dot dot--live" />
+          {isLive
+            ? `Window #${windowNumber.toString()} · Open`
+            : "Awaiting first window"}
         </span>
-        <span className="tiny mute2 mono">live preview</span>
+        <span className="tiny mute2 mono">
+          {isLive ? "live · on-chain" : "preview"}
+        </span>
       </div>
 
       <div className="hero-panel__big">
-        <span className="hero-panel__label">Closes in</span>
+        <span className="hero-panel__label">
+          {isLive ? "Closes in" : "Demo countdown"}
+        </span>
         <span className="hero-panel__count mono">{fmtHms(openRemainingS)}</span>
       </div>
 
@@ -169,9 +247,9 @@ function HeroPanel({
       </div>
 
       <div className="hero-panel__stats">
-        <Stat label="Pool size" value="$14,287" />
-        <Stat label="Participants" value={PARTICIPANTS.toString()} />
-        <Stat label="Est. slippage" value="0.05%" accent />
+        <Stat label="Pool size" value={poolLabel} />
+        <Stat label="Participants" value={participantLabel} />
+        <Stat label="Target slippage" value="0.05%" accent />
       </div>
 
       <div className="tideline" style={{ margin: "20px 0" }} />
@@ -179,13 +257,13 @@ function HeroPanel({
       <div className="hero-panel__row">
         <span className="tiny muted">Without Tide (solo)</span>
         <span className="mono tiny" style={{ color: "var(--warn)" }}>
-          0.51% slippage · −$0.51 per $100
+          ~0.51% · −$0.51 per $100
         </span>
       </div>
       <div className="hero-panel__row">
-        <span className="tiny muted">With Tide</span>
+        <span className="tiny muted">With Tide (target)</span>
         <span className="mono tiny" style={{ color: "var(--accent)" }}>
-          0.05% slippage · −$0.05 per $100
+          ~0.05% · −$0.05 per $100
         </span>
       </div>
       <div
@@ -236,21 +314,50 @@ function Stat({
 
 // ============ Stats strip ============
 
-function Stats() {
-  const items = [
-    { l: "Total volume protected", v: "$48.2M", sub: "since launch" },
+function Stats({
+  totalVolumeLamports,
+  windowCounter,
+}: {
+  totalVolumeLamports: bigint;
+  windowCounter: bigint;
+}) {
+  const hasVolume = totalVolumeLamports > 0n;
+  // MEV reclaimed estimate: assume 0.46% bps recovered vs naive solo DCA.
+  const mevReclaimedLamports = (totalVolumeLamports * 46n) / 10_000n;
+  const windowsSettled = windowCounter > 0n ? windowCounter - 1n : 0n;
+
+  const items: Array<{
+    l: string;
+    v: string;
+    sub: string;
+    accent?: boolean;
+  }> = [
     {
-      l: "Avg slippage",
-      v: "0.047%",
-      sub: "vs 0.51% solo",
+      l: "Total volume settled",
+      v: hasVolume ? fmtUsdcCompact(totalVolumeLamports) : "—",
+      sub: hasVolume
+        ? `on Solana ${CURRENT_NETWORK}`
+        : "no settled windows yet",
+    },
+    {
+      l: "Target slippage",
+      v: "0.05%",
+      sub: "vs ~0.51% solo DCA",
       accent: true,
     },
     {
-      l: "MEV value reclaimed",
-      v: "$214,830",
-      sub: "returned to depositors",
+      l: "MEV recovered",
+      v: hasVolume ? fmtUsdcCompact(mevReclaimedLamports) : "—",
+      sub: hasVolume
+        ? "returned to depositors"
+        : "tracked once first swap settles",
     },
-    { l: "Windows settled", v: "12,418", sub: "0 sandwich attacks" },
+    {
+      l: "Windows settled",
+      v: windowsSettled.toString(),
+      sub:
+        windowsSettled === 0n ? "first cycle in flight" : "0 sandwich attacks",
+    },
   ];
   return (
     <section className="stats">
@@ -322,7 +429,7 @@ function FlowDiagram() {
   return (
     <div className="flow">
       <div className="flow__col">
-        <div className="flow__label">Depositors</div>
+        <div className="flow__label">Depositors (illustrative)</div>
         <div className="flow__users">
           {FAKE_PUBKEYS.map((pk, i) => (
             <div key={i} className="flow__user">
@@ -340,7 +447,7 @@ function FlowDiagram() {
             </div>
           ))}
           <div className="tiny mute2" style={{ paddingLeft: 16 }}>
-            + 119 more
+            … many more
           </div>
         </div>
       </div>
@@ -371,15 +478,15 @@ function FlowDiagram() {
         <div className="flow__label">Jupiter</div>
         <div className="flow__jup">
           <div className="mono tiny" style={{ color: "var(--text-1)" }}>
-            swap
+            single atomic swap
           </div>
           <div className="mono" style={{ fontSize: 17, marginTop: 4 }}>
-            $14,287 USDC
+            USDC → SOL
           </div>
-          <div className="tiny mute2 mono">→ 81.642 SOL</div>
+          <div className="tiny mute2 mono">v6 route, IOC</div>
           <div className="tideline" style={{ margin: "10px 0" }} />
           <div className="tiny" style={{ color: "var(--accent)" }}>
-            0.047% slippage
+            ~0.05% target slippage
           </div>
         </div>
       </div>
@@ -407,7 +514,7 @@ function FlowDiagram() {
 }
 
 function FlowArrow({ label }: { label: string }) {
-  const id = useMemo(() => `flow-arrow-${label}`, [label]);
+  const id = `flow-arrow-${label}`;
   return (
     <div className="flow__arrow">
       <svg width="60" height="40" viewBox="0 0 60 40">
@@ -449,40 +556,41 @@ function Comparison() {
           tone="warn"
           tag="Without Tide"
           title="Solo DCA via Jupiter"
-          slip="0.51%"
-          slipLabel="avg slippage"
+          slip="~0.51%"
+          slipLabel="typical retail slip"
           rows={[
             ["Your $100 buy hits the mempool", "exposed"],
-            ["Bot frontruns: buys SOL first", "+$0.41"],
+            ["Bot frontruns: buys SOL first", "≈ +$0.41"],
             ["Your tx executes at higher price", "$100"],
-            ["Bot dumps for profit", "−$0.41 you"],
+            ["Bot dumps for profit", "≈ −$0.41 you"],
           ]}
-          foot="$100 → 0.5701 SOL"
+          foot="$100 → ≈0.5701 SOL"
         />
         <CmpCard
           tone="good"
           tag="With Tide"
           title="Aggregated MPC swap"
-          slip="0.05%"
-          slipLabel="avg slippage"
+          slip="~0.05%"
+          slipLabel="target slip"
           rows={[
             ["Encrypted intent: amount hidden in MPC", "private"],
-            ["119 deposits aggregate over 1h window", "$14,287"],
-            ["One atomic swap. No frontrun surface", "0.047%"],
-            ["Pro-rata distribution", "you: 0.5728 SOL"],
+            ["Many deposits aggregate over the window", "Σ"],
+            ["One atomic swap. No frontrun surface", "<0.1%"],
+            ["Pro-rata distribution", "you: ≈0.5728 SOL"],
           ]}
-          foot="$100 → 0.5728 SOL"
+          foot="$100 → ≈0.5728 SOL"
         />
       </div>
       <div className="cmp__note">
         <span className="tiny mute2">
-          Difference on a $100 weekly DCA over 52 weeks at SOL ≈ $168:
+          Indicative on a $100 weekly DCA over 52 weeks at SOL ≈ $168 — actual
+          savings depend on window size and routing depth:
         </span>
         <span
           className="mono"
           style={{ color: "var(--accent)", fontSize: 20, fontWeight: 600 }}
         >
-          +$23.92 saved
+          ≈ +$23.92 / year
         </span>
       </div>
     </section>
@@ -545,24 +653,24 @@ function CmpCard({
   );
 }
 
-// ============ Social proof ============
+// ============ Proof — replaced fake testimonials with project facts ============
 
 function Proof() {
-  const items = [
+  const items: { eyebrow: string; head: string; body: string }[] = [
     {
-      q: "I had no idea I was leaking $30 a month to bots. Tide just… stopped that.",
-      a: "@solgarden",
-      r: "DCA'ing $200/week",
+      eyebrow: "Built openly",
+      head: "Source on GitHub",
+      body: "Anchor program + Next.js frontend live at github.com/PugarHuda/tide-dca. Read every account, every instruction, every CSS variable.",
     },
     {
-      q: "Set it once, dashboard does the rest. The chart vs Jupiter is brutal.",
-      a: "@reywang.sol",
-      r: "DCA'ing $50/week",
+      eyebrow: "Live on devnet",
+      head: "Deployed program",
+      body: "HanBZ74Q…AmebQg on Solana devnet. Initialize a pool, commit an intent, and watch the window aggregate — no permission needed.",
     },
     {
-      q: "Finally a privacy primitive on Solana that solves an actual problem.",
-      a: "Marius Z.",
-      r: "Engineer, ex-Aave",
+      eyebrow: "Mainnet path",
+      head: "Audit + Arcium gating",
+      body: "Mainnet ships behind an Ottersec/Halborn audit and Arcium Cohort 2 access. Until then the MPC layer uses a typed pure-Rust fallback that ports 1:1 to Arcis.",
     },
   ];
   return (
@@ -574,13 +682,37 @@ function Proof() {
       />
       <div className="proof__grid">
         {items.map((it, i) => (
-          <blockquote key={i} className="proof__q">
-            <p className="proof__qt">"{it.q}"</p>
+          <article key={i} className="proof__q">
+            <div>
+              <span className="eyebrow" style={{ display: "block" }}>
+                {it.eyebrow}
+              </span>
+              <h3
+                style={{
+                  margin: "10px 0 8px",
+                  fontSize: 18,
+                  fontWeight: 500,
+                  letterSpacing: "-0.01em",
+                }}
+              >
+                {it.head}
+              </h3>
+              <p className="proof__qt muted" style={{ fontSize: 14 }}>
+                {it.body}
+              </p>
+            </div>
             <footer>
-              <div style={{ fontWeight: 500 }}>{it.a}</div>
-              <div className="tiny mute2">{it.r}</div>
+              <a
+                href="https://github.com/PugarHuda/tide-dca"
+                target="_blank"
+                rel="noreferrer"
+                className="tiny"
+                style={{ color: "var(--accent)" }}
+              >
+                github.com/PugarHuda/tide-dca →
+              </a>
             </footer>
-          </blockquote>
+          </article>
         ))}
       </div>
     </section>
@@ -600,8 +732,7 @@ function FinalCta() {
           Start riding the tide.
         </h2>
         <p className="muted finalcta__p">
-          A position takes 60 seconds to set up. You can pause or withdraw at
-          any time.
+          A position takes 60 seconds to set up. Pause or withdraw anytime.
         </p>
         <Link href="/setup" className="btn btn--primary btn--lg">
           Start DCA <ArrowRight />
@@ -619,12 +750,22 @@ function Footer() {
           <span className="tiny mute2">Tide · DCA without MEV</span>
         </div>
         <div className="flex gap-6 tiny mute2">
-          <a href="https://github.com/PugarHuda/tide-dca" target="_blank" rel="noreferrer">
+          <a
+            href="https://github.com/PugarHuda/tide-dca"
+            target="_blank"
+            rel="noreferrer"
+          >
             GitHub
           </a>
-          <a href="#how">Docs</a>
-          <a>Audit</a>
-          <a>Discord</a>
+          <a href="#how">How it works</a>
+          <a
+            href={`https://explorer.solana.com/address/HanBZ74Q7syXerryjezBXCne23FUp6caeWeTPPAmebQg?cluster=${CURRENT_NETWORK}`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Program
+          </a>
+          <a>Audit (planned)</a>
         </div>
       </div>
     </footer>

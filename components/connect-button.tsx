@@ -45,30 +45,8 @@ export function ConnectButton() {
   const wallet = useWallet();
   const privy = PRIVY_APP_ID ? usePrivy() : null;
   const [modalOpen, setModalOpen] = useState(false);
-  const [pendingPick, setPendingPick] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
-
-  // After a user picks a wallet from our modal, select() updates context;
-  // this effect calls connect() on the next render when wallet is ready.
-  useEffect(() => {
-    if (
-      pendingPick &&
-      wallet.wallet?.adapter.name === pendingPick &&
-      !wallet.connected &&
-      !wallet.connecting
-    ) {
-      const adapter = wallet.wallet.adapter;
-      void wallet
-        .connect()
-        .catch((err) => {
-          // User rejected, or adapter threw — surface in console only.
-          // The modal is already closed; no UI impact.
-          console.warn(`[Tide] connect ${adapter.name} failed:`, err);
-        })
-        .finally(() => setPendingPick(null));
-    }
-  }, [pendingPick, wallet]);
 
   // ── Connected via wallet-adapter ──
   // `mounted` gate avoids hydration mismatch — wallet-adapter restores
@@ -115,10 +93,23 @@ export function ConnectButton() {
     <ConnectModal
       wallets={wallet.wallets}
       connecting={wallet.connecting}
-      onPickWallet={(w) => {
-        wallet.select(w.adapter.name);
-        setPendingPick(w.adapter.name);
+      onPickWallet={async (w) => {
+        // Browser popups (Phantom, Solflare) require an unbroken
+        // user-gesture chain — calling adapter.connect() synchronously
+        // here preserves it. Routing through select() + a useEffect-
+        // triggered connect (which we tried earlier) breaks the chain
+        // and Phantom blocks the popup silently.
+        //
+        // select() still runs so the wallet-adapter context knows which
+        // wallet is current; the adapter's connect/disconnect events
+        // propagate state through the existing listeners regardless.
         setModalOpen(false);
+        try {
+          wallet.select(w.adapter.name);
+          await w.adapter.connect();
+        } catch (err) {
+          console.warn(`[Tide] connect ${w.adapter.name} failed:`, err);
+        }
       }}
       onPickPrivy={
         privy

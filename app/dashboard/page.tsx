@@ -14,10 +14,18 @@ import {
   useUserIntent,
   useUserPosition,
 } from "@/lib/hooks";
-import { submitClaimAllocation, submitCommitIntent } from "@/lib/tide-actions";
-import { calculateSavings, bpsToPct, formatSol, formatUsdc } from "@/lib/utils";
+import {
+  submitClaimAllocation,
+  submitCommitIntent,
+} from "@/lib/tide-actions";
+import {
+  bpsToPct,
+  calculateSavings,
+  formatSol,
+  formatUsdc,
+} from "@/lib/utils";
 
-const STANDALONE_SLIPPAGE_BPS_DEFAULT = 50; // assumed retail spot/DCA reference
+const STANDALONE_SLIPPAGE_BPS_DEFAULT = 50;
 
 type ActionState =
   | { kind: "idle" }
@@ -76,11 +84,11 @@ export default function DashboardPage() {
       />
     );
   }
-
   if (poolLoading) {
-    return <EmptyState title="Loading pool…" body="Fetching on-chain state." />;
+    return (
+      <EmptyState title="Loading pool…" body="Fetching on-chain state." />
+    );
   }
-
   if (!pool) {
     return (
       <EmptyState
@@ -89,7 +97,6 @@ export default function DashboardPage() {
       />
     );
   }
-
   if (!position) {
     return (
       <EmptyState
@@ -101,7 +108,8 @@ export default function DashboardPage() {
   }
 
   // ── Derived UI numbers ──
-  const avgPoolSlippageBps = currentWindow?.effectiveSlippageBps ?? pool.feeBps;
+  const avgPoolSlippageBps =
+    currentWindow?.effectiveSlippageBps ?? pool.feeBps;
   const totalSaved = calculateSavings(
     avgPoolSlippageBps,
     STANDALONE_SLIPPAGE_BPS_DEFAULT,
@@ -118,131 +126,135 @@ export default function DashboardPage() {
     nextWindowSeconds > 3600
       ? `in ${Math.floor(nextWindowSeconds / 3600)}h`
       : `in ${Math.floor(nextWindowSeconds / 60)}m`;
-  const windowDurationLabel = `${Number(pool.windowDurationSeconds) / 60} minutes`;
+  const windowDurationLabel = `${
+    Number(pool.windowDurationSeconds) / 60
+  } minutes`;
 
   return (
-    <main className="mx-auto max-w-6xl px-6 py-16">
-      <header className="mb-10 flex flex-wrap items-end justify-between gap-4">
+    <main className="page page--wide">
+      <header
+        className="flex"
+        style={{
+          alignItems: "flex-end",
+          justifyContent: "space-between",
+          flexWrap: "wrap",
+          gap: 16,
+          marginBottom: 36,
+        }}
+      >
         <div>
-          <p className="text-xs uppercase tracking-widest text-cyan-400">
-            Your Tide Dashboard
-          </p>
-          <h1 className="mt-2 text-3xl font-bold tracking-tight">
-            Saved {formatUsdc(totalSaved)} so far
+          <span className="eyebrow">Your Tide dashboard</span>
+          <h1 className="page__h1" style={{ marginTop: 8 }}>
+            Saved{" "}
+            <span className="mono" style={{ color: "var(--accent)" }}>
+              {formatUsdc(totalSaved)}
+            </span>{" "}
+            so far
           </h1>
+          <p className="page__sub" style={{ marginBottom: 0 }}>
+            Live data from devnet · window subscription auto-updates
+          </p>
         </div>
-        <Link
-          href="/setup"
-          className="rounded-md border border-zinc-700 px-4 py-2 text-sm hover:bg-zinc-900"
-        >
+        <Link href="/setup" className="btn btn--ghost">
           Adjust DCA
         </Link>
       </header>
 
-      <section className="mb-10 grid gap-4 md:grid-cols-4">
-        <Card label="Total deposited" value={formatUsdc(position.totalDeposited)} />
-        <Card label="Total acquired" value={formatSol(position.totalAcquired)} />
-        <Card
+      <section
+        className="grid grid--4"
+        style={{ marginBottom: 28, gap: 16 }}
+      >
+        <KpiCard
+          label="Total deposited"
+          value={formatUsdc(position.totalDeposited)}
+        />
+        <KpiCard
+          label="Total acquired"
+          value={formatSol(position.totalAcquired)}
+        />
+        <KpiCard
           label="Avg slippage"
           value={bpsToPct(avgPoolSlippageBps)}
-          subtext={`vs ${bpsToPct(STANDALONE_SLIPPAGE_BPS_DEFAULT)} standalone`}
+          subtext={`vs ${bpsToPct(
+            STANDALONE_SLIPPAGE_BPS_DEFAULT,
+          )} standalone`}
+          accent
         />
-        <Card
+        <KpiCard
           label="Last window joined"
           value={position.lastWindow.toString()}
         />
       </section>
 
-      {/* Commit to current open window — only when user hasn't committed yet */}
+      {/* Commit CTA — open window, no intent yet */}
       {currentWindow && currentWindow.status === 0 && !pendingIntent && (
-        <section className="mb-10 rounded-lg border border-cyan-500/30 bg-cyan-950/20 p-5">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <h3 className="font-semibold">
-                Commit to window #{currentWindow.windowNumber.toString()}
-              </h3>
-              <p className="text-sm text-zinc-400">
-                Deposit {formatUsdc(position.amountPerWindow)} into the encrypted
-                pool. Your individual amount stays private; only the aggregate
-                lands on chain.
-              </p>
-            </div>
-            <button
-              onClick={() => void handleCommit()}
-              disabled={commitState.kind === "submitting"}
-              className="rounded-md bg-cyan-500 px-4 py-2 font-medium text-zinc-900 transition hover:bg-cyan-400 disabled:opacity-50"
-            >
-              {commitState.kind === "submitting" ? "Committing…" : "Commit"}
-            </button>
-          </div>
-          {commitState.kind === "success" && (
-            <p className="mt-3 text-xs text-emerald-300">
-              ✓ Committed.{" "}
-              <a
-                className="underline decoration-dotted underline-offset-2"
-                href={`https://explorer.solana.com/tx/${commitState.signature}?cluster=devnet`}
-                target="_blank"
-                rel="noreferrer"
-              >
-                View on Solana Explorer
-              </a>
-            </p>
-          )}
-          {commitState.kind === "error" && (
-            <p className="mt-3 text-xs text-rose-300">✗ {commitState.message}</p>
-          )}
-        </section>
+        <ActionBanner
+          title={`Commit to window #${currentWindow.windowNumber.toString()}`}
+          body={
+            <>
+              Deposit{" "}
+              <span className="mono" style={{ color: "var(--accent)" }}>
+                {formatUsdc(position.amountPerWindow)}
+              </span>{" "}
+              into the encrypted pool. Your individual amount stays private;
+              only the aggregate lands on chain.
+            </>
+          }
+          actionLabel={
+            commitState.kind === "submitting" ? "Committing…" : "Commit"
+          }
+          onAction={() => void handleCommit()}
+          submitting={commitState.kind === "submitting"}
+          state={commitState}
+        />
       )}
 
-      {/* Already committed — show waiting state */}
+      {/* Already committed */}
       {currentWindow && currentWindow.status === 0 && pendingIntent && (
-        <section className="mb-10 rounded-lg border border-zinc-800 bg-zinc-900/30 p-4">
-          <p className="text-sm text-zinc-400">
-            ✓ You committed {formatUsdc(pendingIntent.amount)} to window #
-            {currentWindow.windowNumber.toString()}. Waiting for window to
+        <section
+          className="card card--quiet"
+          style={{ marginBottom: 24, padding: "16px 20px" }}
+        >
+          <p className="tiny" style={{ color: "var(--text-1)", margin: 0 }}>
+            <span style={{ color: "var(--accent)", marginRight: 6 }}>✓</span>
+            You committed{" "}
+            <span className="mono">{formatUsdc(pendingIntent.amount)}</span>{" "}
+            to window #{currentWindow.windowNumber.toString()}. Waiting for
             close + aggregate.
           </p>
         </section>
       )}
 
+      {/* Pending claim */}
       {pendingClaim > 0n && (
-        <section className="mb-10 rounded-lg border border-cyan-500/30 bg-cyan-950/20 p-5">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <h3 className="font-semibold">Pending allocation</h3>
-              <p className="text-sm text-zinc-400">
-                {formatSol(pendingClaim)} ready to claim from window #
-                {currentWindow?.windowNumber.toString()}
-              </p>
-            </div>
-            <button
-              onClick={() => void handleClaim()}
-              disabled={claimState.kind === "submitting"}
-              className="rounded-md bg-cyan-500 px-4 py-2 font-medium text-zinc-900 transition hover:bg-cyan-400 disabled:opacity-50"
-            >
-              {claimState.kind === "submitting" ? "Claiming…" : "Claim"}
-            </button>
-          </div>
-          {claimState.kind === "success" && (
-            <p className="mt-3 text-xs text-emerald-300">
-              ✓ Claimed.{" "}
-              <a
-                className="underline decoration-dotted underline-offset-2"
-                href={`https://explorer.solana.com/tx/${claimState.signature}?cluster=devnet`}
-                target="_blank"
-                rel="noreferrer"
-              >
-                View on Solana Explorer
-              </a>
-            </p>
-          )}
-          {claimState.kind === "error" && (
-            <p className="mt-3 text-xs text-rose-300">✗ {claimState.message}</p>
-          )}
-        </section>
+        <ActionBanner
+          title="Pending allocation"
+          body={
+            <>
+              <span className="mono" style={{ color: "var(--accent)" }}>
+                {formatSol(pendingClaim)}
+              </span>{" "}
+              ready to claim from window #
+              {currentWindow?.windowNumber.toString()}
+            </>
+          }
+          actionLabel={
+            claimState.kind === "submitting" ? "Claiming…" : "Claim"
+          }
+          onAction={() => void handleClaim()}
+          submitting={claimState.kind === "submitting"}
+          state={claimState}
+        />
       )}
 
-      <section className="mb-10 grid gap-6 lg:grid-cols-2">
+      <section
+        className="grid"
+        style={{
+          gridTemplateColumns: "1fr 1fr",
+          gap: 18,
+          marginBottom: 28,
+        }}
+      >
         {currentWindow ? (
           <WindowStatusCard
             totalCommitted={currentWindow.totalCommittedUsdc}
@@ -251,72 +263,227 @@ export default function DashboardPage() {
             status={currentWindow.status}
           />
         ) : (
-          <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-5 text-sm text-zinc-400">
-            No active window. Run init_window to open the next cycle.
+          <div className="card">
+            <span className="card__title">Current window</span>
+            <p className="muted" style={{ marginTop: 12, fontSize: 14 }}>
+              No active window. Run init_window from /admin to open the next
+              cycle.
+            </p>
           </div>
         )}
-        <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-5">
-          <h3 className="mb-4 font-semibold">Your Position</h3>
-          <dl className="space-y-3 text-sm">
+        <div className="card">
+          <span className="card__title">Your position</span>
+          <dl
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 10,
+              margin: 0,
+              marginTop: 14,
+              fontSize: 13.5,
+            }}
+          >
             <Row
               label="DCA amount per window"
-              value={formatUsdc(position.amountPerWindow)}
+              value={
+                <span className="mono">
+                  {formatUsdc(position.amountPerWindow)}
+                </span>
+              }
             />
             <Row label="Window duration" value={windowDurationLabel} />
-            <Row label="Max slippage" value={bpsToPct(position.maxSlippageBps)} />
+            <Row
+              label="Max slippage"
+              value={
+                <span className="mono">
+                  {bpsToPct(position.maxSlippageBps)}
+                </span>
+              }
+            />
             <Row
               label="Status"
               value={
                 position.active ? (
-                  <span className="text-emerald-400">Active</span>
+                  <span className="badge badge--good">Active</span>
                 ) : (
-                  <span className="text-zinc-400">Paused</span>
+                  <span className="badge">Paused</span>
                 )
               }
             />
-            <Row label="Next contribution" value={nextLabel} />
+            <Row
+              label="Next contribution"
+              value={<span className="mono">{nextLabel}</span>}
+            />
           </dl>
         </div>
       </section>
 
-      <section className="mb-10">
-        <h2 className="mb-4 text-xl font-semibold">Cumulative Savings</h2>
+      <section style={{ marginBottom: 28 }}>
         <SavingsChart />
       </section>
 
-      <p className="mt-10 text-center text-xs text-zinc-600">
-        Live data via @solana/web3.js account subscriptions. Savings curve still
-        uses a synthetic series — backfill from Helius DAS once we have window
-        history.
+      <p
+        className="tiny mute2"
+        style={{ textAlign: "center", marginTop: 24 }}
+      >
+        Live data via @solana/web3.js account subscriptions. Savings curve
+        uses a synthetic series until we backfill window history from Helius
+        DAS.
       </p>
     </main>
   );
 }
 
-function Card({
+function KpiCard({
   label,
   value,
   subtext,
+  accent,
 }: {
   label: string;
   value: string;
   subtext?: string;
+  accent?: boolean;
 }) {
   return (
-    <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-4">
-      <div className="text-xs text-zinc-500">{label}</div>
-      <div className="mt-1 font-mono text-2xl">{value}</div>
-      {subtext && <div className="mt-1 text-xs text-zinc-500">{subtext}</div>}
+    <div className="card" style={{ padding: 18 }}>
+      <div className="tiny mute2" style={{ marginBottom: 6 }}>
+        {label}
+      </div>
+      <div
+        className="mono"
+        style={{
+          fontSize: 24,
+          fontWeight: 500,
+          letterSpacing: "-0.01em",
+          color: accent ? "var(--accent)" : "var(--text-0)",
+        }}
+      >
+        {value}
+      </div>
+      {subtext && (
+        <div className="tiny mute2" style={{ marginTop: 4 }}>
+          {subtext}
+        </div>
+      )}
     </div>
   );
 }
 
-function Row({ label, value }: { label: string; value: React.ReactNode }) {
+function Row({
+  label,
+  value,
+}: {
+  label: string;
+  value: React.ReactNode;
+}) {
   return (
-    <div className="flex justify-between border-b border-zinc-800 pb-2 last:border-0">
-      <dt className="text-zinc-500">{label}</dt>
-      <dd className="font-mono">{value}</dd>
+    <div
+      className="flex"
+      style={{
+        justifyContent: "space-between",
+        alignItems: "center",
+        paddingBottom: 10,
+        borderBottom: "1px solid var(--line-soft)",
+      }}
+    >
+      <dt className="muted" style={{ fontSize: 13 }}>
+        {label}
+      </dt>
+      <dd style={{ margin: 0 }}>{value}</dd>
     </div>
+  );
+}
+
+function ActionBanner({
+  title,
+  body,
+  actionLabel,
+  onAction,
+  submitting,
+  state,
+}: {
+  title: string;
+  body: React.ReactNode;
+  actionLabel: string;
+  onAction: () => void;
+  submitting: boolean;
+  state: ActionState;
+}) {
+  return (
+    <section
+      className="card"
+      style={{
+        marginBottom: 24,
+        borderColor: "var(--accent-line)",
+        background:
+          "linear-gradient(180deg, rgba(6,182,212,0.04), transparent 60%), var(--bg-2)",
+      }}
+    >
+      <div
+        className="flex"
+        style={{
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 16,
+          flexWrap: "wrap",
+        }}
+      >
+        <div style={{ flex: 1, minWidth: 240 }}>
+          <h3
+            style={{
+              margin: 0,
+              fontSize: 17,
+              fontWeight: 500,
+              letterSpacing: "-0.01em",
+            }}
+          >
+            {title}
+          </h3>
+          <p
+            className="muted"
+            style={{ margin: "6px 0 0", fontSize: 13.5, lineHeight: 1.5 }}
+          >
+            {body}
+          </p>
+        </div>
+        <button
+          onClick={onAction}
+          disabled={submitting}
+          className="btn btn--primary"
+        >
+          {actionLabel}
+        </button>
+      </div>
+      {state.kind === "success" && (
+        <p
+          className="tiny"
+          style={{
+            color: "var(--good)",
+            margin: 0,
+            marginTop: 12,
+          }}
+        >
+          ✓ Confirmed.{" "}
+          <a
+            style={{ textDecoration: "underline" }}
+            href={`https://explorer.solana.com/tx/${state.signature}?cluster=devnet`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            View on Solana Explorer
+          </a>
+        </p>
+      )}
+      {state.kind === "error" && (
+        <p
+          className="tiny"
+          style={{ color: "var(--bad)", margin: 0, marginTop: 12 }}
+        >
+          ✗ {state.message}
+        </p>
+      )}
+    </section>
   );
 }
 
@@ -330,13 +497,19 @@ function EmptyState({
   cta?: { label: string; href: Route };
 }) {
   return (
-    <main className="mx-auto max-w-2xl px-6 py-24 text-center">
-      <h1 className="mb-3 text-2xl font-semibold">{title}</h1>
-      <p className="text-zinc-400">{body}</p>
+    <main
+      className="page page--narrow"
+      style={{ textAlign: "center", paddingTop: 80, paddingBottom: 80 }}
+    >
+      <h1 className="page__h1" style={{ fontSize: 26 }}>
+        {title}
+      </h1>
+      <p className="page__sub">{body}</p>
       {cta && (
         <Link
           href={cta.href}
-          className="mt-6 inline-block rounded-md bg-cyan-500 px-5 py-2 font-medium text-zinc-900 transition hover:bg-cyan-400"
+          className="btn btn--primary"
+          style={{ marginTop: 8 }}
         >
           {cta.label}
         </Link>

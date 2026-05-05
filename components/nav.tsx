@@ -1,30 +1,41 @@
+"use client";
+
 import Link from "next/link";
+import { usePathname } from "next/navigation";
+
 import { ConnectButton } from "./connect-button";
+import { TideMark } from "./tide-mark";
+import { CURRENT_NETWORK } from "@/lib/constants";
+
+const LINKS = [
+  { href: "/setup", label: "Setup" },
+  { href: "/dashboard", label: "Dashboard" },
+  { href: "/admin", label: "Admin" },
+] as const;
 
 export function Nav() {
+  const pathname = usePathname();
   return (
-    <nav className="sticky top-0 z-40 border-b border-zinc-900 bg-zinc-950/80 backdrop-blur">
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-        <Link href="/" className="flex items-center gap-2 font-mono text-lg">
-          <span className="text-cyan-400">≈</span>
-          <span className="font-semibold">tide</span>
-        </Link>
-        <div className="flex items-center gap-6 text-sm">
+    <nav className="nav">
+      <Link href="/" className="nav__brand">
+        <TideMark />
+        <span>Tide</span>
+      </Link>
+      <div className="nav__links">
+        {LINKS.map((it) => (
           <Link
-            href="/setup"
-            className="text-zinc-400 transition hover:text-zinc-100"
+            key={it.href}
+            href={it.href}
+            className="nav__link"
+            data-active={pathname === it.href}
           >
-            Setup DCA
+            {it.label}
           </Link>
-          <Link
-            href="/dashboard"
-            className="text-zinc-400 transition hover:text-zinc-100"
-          >
-            Dashboard
-          </Link>
-          <ConnectButton />
-        </div>
+        ))}
       </div>
+      <div className="nav__spacer" />
+      <span className="nav__net">solana {CURRENT_NETWORK}</span>
+      <ConnectButton />
     </nav>
   );
 }

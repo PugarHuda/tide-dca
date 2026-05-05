@@ -1,16 +1,12 @@
 "use client";
 
 /**
- * Admin / cron-runner page for Tide.
+ * Admin / cron-runner page for Tide. Restyled with the design's class system;
+ * functional logic + on-chain wiring unchanged.
  *
- * Two operations live here:
- *   1. init_pool   — one-time, creates the canonical USDC -> SOL pool.
- *   2. init_window — permissionless, opens the next aggregation cycle.
- *
- * Anyone can call init_window once a cycle completes, but in practice this
- * page is the operator's "hit button to advance" tool until we run a cron.
- *
- * NOT shown in the main nav — admin reaches it by URL.
+ * Lifecycle order: init_pool → init_window → trigger_aggregate → execute_swap.
+ * Each ActionCard's disabled state mirrors the on-chain require!s so users
+ * don't button-mash through reverts.
  */
 
 import { useState } from "react";
@@ -40,7 +36,9 @@ export default function AdminPage() {
 
   const [poolState, setPoolState] = useState<ActionState>({ kind: "idle" });
   const [windowState, setWindowState] = useState<ActionState>({ kind: "idle" });
-  const [aggregateState, setAggregateState] = useState<ActionState>({ kind: "idle" });
+  const [aggregateState, setAggregateState] = useState<ActionState>({
+    kind: "idle",
+  });
   const [swapState, setSwapState] = useState<ActionState>({ kind: "idle" });
 
   const handleInitPool = async () => {
@@ -55,11 +53,19 @@ export default function AdminPage() {
 
   const handleInitWindow = async () => {
     if (!pool) {
-      setWindowState({ kind: "error", message: "Pool not initialized. Run init_pool first." });
+      setWindowState({
+        kind: "error",
+        message: "Pool not initialized. Run init_pool first.",
+      });
       return;
     }
     setWindowState({ kind: "submitting" });
-    const result = await submitInitWindow(connection, wallet, poolPubkey, pool.windowCounter);
+    const result = await submitInitWindow(
+      connection,
+      wallet,
+      poolPubkey,
+      pool.windowCounter,
+    );
     setWindowState(
       result.ok
         ? { kind: "success", signature: result.signature }
@@ -73,7 +79,12 @@ export default function AdminPage() {
       return;
     }
     setAggregateState({ kind: "submitting" });
-    const result = await submitTriggerAggregate(connection, wallet, poolPubkey, windowPubkey);
+    const result = await submitTriggerAggregate(
+      connection,
+      wallet,
+      poolPubkey,
+      windowPubkey,
+    );
     setAggregateState(
       result.ok
         ? { kind: "success", signature: result.signature }
@@ -87,9 +98,6 @@ export default function AdminPage() {
       return;
     }
     setSwapState({ kind: "submitting" });
-    // Min acquired = 0 here is unsafe in production; for MVP we trust the
-    // Jupiter quote's slippage guard (passed inside swap-instructions). To
-    // tighten this, call fetchQuote first and pass otherAmountThreshold.
     const result = await submitExecuteSwap(connection, wallet, {
       poolPda: poolPubkey,
       windowPda: windowPubkey,
@@ -110,9 +118,7 @@ export default function AdminPage() {
       ? "—"
       : ["Open", "Aggregating", "Distributed", "Failed"][currentWindow.status];
 
-  // ── trigger_aggregate gating ──
-  // Program requires (a) clock >= window.end_ts AND (b) total_committed >= min_pool_size.
-  // Reflect both in the UI so users don't button-mash through an inevitable revert.
+  // ── trigger_aggregate gating mirrors program require!s ──
   const nowSec = Math.floor(Date.now() / 1000);
   const windowExpired =
     !!currentWindow && nowSec >= Number(currentWindow.endTs);
@@ -120,11 +126,14 @@ export default function AdminPage() {
     !!currentWindow &&
     !!pool &&
     currentWindow.totalCommittedUsdc >= pool.minPoolSizeUsdc;
-  const secondsUntilExpiry =
-    currentWindow ? Math.max(0, Number(currentWindow.endTs) - nowSec) : 0;
+  const secondsUntilExpiry = currentWindow
+    ? Math.max(0, Number(currentWindow.endTs) - nowSec)
+    : 0;
   const expiryLabel =
     secondsUntilExpiry > 3600
-      ? `${Math.floor(secondsUntilExpiry / 3600)}h ${Math.floor((secondsUntilExpiry % 3600) / 60)}m`
+      ? `${Math.floor(secondsUntilExpiry / 3600)}h ${Math.floor(
+          (secondsUntilExpiry % 3600) / 60,
+        )}m`
       : secondsUntilExpiry > 60
         ? `${Math.floor(secondsUntilExpiry / 60)}m ${secondsUntilExpiry % 60}s`
         : `${secondsUntilExpiry}s`;
@@ -145,30 +154,49 @@ export default function AdminPage() {
         : !windowExpired
           ? `Window closes in ${expiryLabel}`
           : !aggregateThresholdMet && pool
-            ? `Below threshold: ${formatUsdc(currentWindow.totalCommittedUsdc)} of ${formatUsdc(pool.minPoolSizeUsdc)} required`
+            ? `Below threshold: ${formatUsdc(
+                currentWindow.totalCommittedUsdc,
+              )} of ${formatUsdc(pool.minPoolSizeUsdc)} required`
             : undefined;
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-16">
-      <header className="mb-10">
-        <p className="text-xs uppercase tracking-widest text-cyan-400">
-          Operator Console
-        </p>
-        <h1 className="mt-2 text-3xl font-bold tracking-tight">
+    <main className="page page--narrow">
+      <div style={{ marginBottom: 36 }}>
+        <span className="eyebrow">Operator Console</span>
+        <h1 className="page__h1" style={{ marginTop: 8 }}>
           Tide admin / cron tools
         </h1>
-        <p className="mt-2 text-zinc-400">
-          One-time pool initialization + permissionless window advancement.
+        <p className="page__sub">
+          One-time pool init + permissionless window advancement +
+          aggregation/swap orchestration.
         </p>
-      </header>
+      </div>
 
-      <section className="mb-8 rounded-lg border border-zinc-800 bg-zinc-900/40 p-5">
-        <h2 className="mb-3 font-semibold">Pool state</h2>
+      <section className="card" style={{ marginBottom: 24 }}>
+        <div className="card__head">
+          <span className="card__title">Pool state</span>
+          {pool && <span className="badge badge--accent">live</span>}
+        </div>
+
         {poolLoading ? (
-          <p className="text-sm text-zinc-500">Loading…</p>
+          <p className="muted" style={{ fontSize: 14, margin: 0 }}>
+            Loading…
+          </p>
         ) : pool ? (
-          <dl className="grid grid-cols-2 gap-y-2 text-sm">
-            <Row label="Pool PDA" value={shortAddress(poolPubkey.toBase58())} />
+          <dl
+            style={{
+              display: "grid",
+              gridTemplateColumns: "max-content 1fr",
+              rowGap: 8,
+              columnGap: 24,
+              fontSize: 13.5,
+              margin: 0,
+            }}
+          >
+            <Row
+              label="Pool PDA"
+              value={shortAddress(poolPubkey.toBase58())}
+            />
             <Row
               label="Authority"
               value={shortAddress(pool.authority.toBase58())}
@@ -199,17 +227,19 @@ export default function AdminPage() {
             />
           </dl>
         ) : (
-          <p className="text-sm text-zinc-500">
+          <p className="muted" style={{ fontSize: 14, margin: 0 }}>
             No Pool account at{" "}
-            <code className="text-zinc-400">{shortAddress(poolPubkey.toBase58())}</code>
-            {" "}— run init_pool below.
+            <code className="mono mute2">
+              {shortAddress(poolPubkey.toBase58())}
+            </code>{" "}
+            — run init_pool below.
           </p>
         )}
       </section>
 
       <ActionCard
         title="init_pool"
-        description="Creates the canonical USDC -> SOL pool with default config (1h windows, 100 USDC min, 5 bps fee)."
+        description="Creates the canonical USDC → SOL pool with default config (1h windows, 100 USDC min, 5 bps fee)."
         buttonLabel="Initialize Pool"
         disabled={!!pool || !wallet.publicKey}
         disabledReason={
@@ -259,9 +289,13 @@ export default function AdminPage() {
 
       <ActionCard
         title="execute_swap"
-        description="Pulls a Jupiter quote (USDC -> SOL, direct routes only) and forwards the swap instruction as a CPI signed by the escrow PDA. Requires window status = Aggregating."
+        description="Pulls a Jupiter quote (USDC → SOL) and forwards the swap as a CPI signed by the escrow PDA. Requires window status = Aggregating."
         buttonLabel="Execute Swap (Jupiter)"
-        disabled={!currentWindow || currentWindow.status !== 1 || !wallet.publicKey}
+        disabled={
+          !currentWindow ||
+          currentWindow.status !== 1 ||
+          !wallet.publicKey
+        }
         disabledReason={
           !wallet.publicKey
             ? "Connect wallet"
@@ -296,40 +330,89 @@ function ActionCard({
   onClick: () => void | Promise<void>;
 }) {
   return (
-    <section className="mb-6 rounded-lg border border-zinc-800 bg-zinc-900/40 p-5">
-      <h2 className="font-semibold">{title}</h2>
-      <p className="mt-1 text-sm text-zinc-400">{description}</p>
+    <section className="card" style={{ marginBottom: 16 }}>
+      <div className="card__head" style={{ marginBottom: 8 }}>
+        <h2
+          className="mono"
+          style={{
+            margin: 0,
+            fontSize: 15,
+            fontWeight: 500,
+            color: "var(--text-0)",
+          }}
+        >
+          {title}
+        </h2>
+        {state.kind === "success" && (
+          <span className="badge badge--good">confirmed</span>
+        )}
+        {state.kind === "submitting" && (
+          <span className="badge badge--accent">
+            <span className="dot dot--live" /> submitting
+          </span>
+        )}
+      </div>
+      <p
+        className="muted"
+        style={{ fontSize: 13.5, lineHeight: 1.55, margin: 0 }}
+      >
+        {description}
+      </p>
 
       {state.kind === "success" && (
-        <div className="mt-3 rounded-md border border-emerald-500/40 bg-emerald-950/30 p-3 text-xs text-emerald-200">
+        <p
+          className="tiny"
+          style={{
+            marginTop: 12,
+            marginBottom: 0,
+            color: "var(--good)",
+          }}
+        >
           ✓ Confirmed.{" "}
           <a
             href={`https://explorer.solana.com/tx/${state.signature}?cluster=devnet`}
             target="_blank"
             rel="noreferrer"
-            className="underline decoration-dotted underline-offset-2"
+            style={{ textDecoration: "underline" }}
           >
             View on Solana Explorer
           </a>
-        </div>
+        </p>
       )}
       {state.kind === "error" && (
-        <div className="mt-3 rounded-md border border-rose-500/40 bg-rose-950/30 p-3 text-xs text-rose-200">
+        <p
+          className="tiny"
+          style={{
+            marginTop: 12,
+            marginBottom: 0,
+            color: "var(--bad)",
+          }}
+        >
           ✗ {state.message}
-        </div>
+        </p>
       )}
 
-      <button
-        onClick={() => void onClick()}
-        disabled={disabled || state.kind === "submitting"}
-        className="mt-4 rounded-md bg-cyan-500 px-4 py-2 font-medium text-zinc-900 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-40"
-        title={disabledReason}
+      <div
+        className="flex"
+        style={{
+          alignItems: "center",
+          gap: 14,
+          marginTop: 16,
+          flexWrap: "wrap",
+        }}
       >
-        {state.kind === "submitting" ? "Submitting…" : buttonLabel}
-      </button>
-      {disabled && disabledReason && (
-        <span className="ml-3 text-xs text-zinc-500">— {disabledReason}</span>
-      )}
+        <button
+          onClick={() => void onClick()}
+          disabled={disabled || state.kind === "submitting"}
+          className="btn btn--primary"
+          title={disabledReason}
+        >
+          {state.kind === "submitting" ? "Submitting…" : buttonLabel}
+        </button>
+        {disabled && disabledReason && (
+          <span className="tiny mute2">— {disabledReason}</span>
+        )}
+      </div>
     </section>
   );
 }
@@ -337,8 +420,12 @@ function ActionCard({
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <>
-      <dt className="text-zinc-500">{label}</dt>
-      <dd className="font-mono text-zinc-200">{value}</dd>
+      <dt className="muted" style={{ fontSize: 13 }}>
+        {label}
+      </dt>
+      <dd className="mono" style={{ margin: 0, color: "var(--text-1)" }}>
+        {value}
+      </dd>
     </>
   );
 }

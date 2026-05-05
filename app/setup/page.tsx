@@ -2,30 +2,60 @@ import { DcaSetupForm } from "@/components/dca-setup-form";
 
 export default function SetupPage() {
   return (
-    <main className="mx-auto max-w-2xl px-6 py-16">
-      <header className="mb-10">
-        <p className="text-xs uppercase tracking-widest text-cyan-400">
-          Setup Recurring DCA
-        </p>
-        <h1 className="mt-2 text-3xl font-bold tracking-tight">
-          Configure your hidden-liquidity DCA
+    <main className="page page--narrow">
+      <div style={{ marginBottom: 36 }}>
+        <span className="eyebrow">Setup</span>
+        <h1 className="page__h1" style={{ marginTop: 8 }}>
+          Configure your DCA position
         </h1>
-        <p className="mt-2 text-zinc-400">
-          Set your recurring buy. Your specific amount stays encrypted.
-          Aggregate execution prevents MEV.
+        <p className="page__sub">
+          Encrypted client-side. Pause or withdraw anytime.
         </p>
-      </header>
+      </div>
 
       <DcaSetupForm />
 
-      <section className="mt-10 space-y-3 rounded-lg border border-zinc-800 bg-zinc-900/30 p-5 text-sm text-zinc-400">
-        <h3 className="font-semibold text-zinc-200">Privacy Guarantees</h3>
-        <ul className="space-y-1 text-xs">
-          <li>✓ Your specific amount is encrypted as MPC shares (Arcium)</li>
-          <li>✓ Public on-chain: only the aggregate (total + count)</li>
-          <li>✓ MEV bots see encrypted ciphertext, can't sandwich</li>
+      <section className="card card--quiet" style={{ marginTop: 28 }}>
+        <h3
+          style={{
+            fontSize: 13,
+            fontWeight: 500,
+            letterSpacing: "0.04em",
+            textTransform: "uppercase",
+            color: "var(--text-3)",
+            margin: 0,
+            marginBottom: 14,
+          }}
+        >
+          Privacy guarantees
+        </h3>
+        <ul
+          style={{
+            margin: 0,
+            padding: 0,
+            listStyle: "none",
+            display: "flex",
+            flexDirection: "column",
+            gap: 8,
+            fontSize: 13.5,
+            color: "var(--text-1)",
+          }}
+        >
           <li>
-            ✓ Allocations distributed pro-rata, your individual share stays hidden
+            <span style={{ color: "var(--accent)", marginRight: 8 }}>✓</span>
+            Your specific amount is encrypted as MPC shares via Arcium
+          </li>
+          <li>
+            <span style={{ color: "var(--accent)", marginRight: 8 }}>✓</span>
+            Public on-chain: only the aggregate (total + count)
+          </li>
+          <li>
+            <span style={{ color: "var(--accent)", marginRight: 8 }}>✓</span>
+            MEV bots see encrypted ciphertext, can't sandwich
+          </li>
+          <li>
+            <span style={{ color: "var(--accent)", marginRight: 8 }}>✓</span>
+            Allocations distributed pro-rata; individual share stays hidden
           </li>
         </ul>
       </section>

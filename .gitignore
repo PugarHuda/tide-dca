@@ -41,3 +41,6 @@ yarn-error.log*
 Thumbs.db
 
 .vercel
+
+# Design handoff artifacts (read-only reference, not part of build)
+.designs/

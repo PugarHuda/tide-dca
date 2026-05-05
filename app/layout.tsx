@@ -1,15 +1,29 @@
 import type { Metadata } from "next";
+import { Geist, Geist_Mono } from "next/font/google";
+
 import { Providers } from "@/lib/providers";
 import { Nav } from "@/components/nav";
 import "./globals.css";
 
+const geist = Geist({
+  subsets: ["latin"],
+  variable: "--font-geist",
+  display: "swap",
+});
+
+const geistMono = Geist_Mono({
+  subsets: ["latin"],
+  variable: "--font-geist-mono",
+  display: "swap",
+});
+
 export const metadata: Metadata = {
-  title: "Tide — DCA Without MEV",
+  title: "Tide — DCA without MEV",
   description:
-    "Hidden-Liquidity DCA Pool for Solana. Encrypted intents via Arcium, aggregate execute via Jupiter, pro-rata distribute. Bots blind, retail wins.",
+    "Hidden-Liquidity DCA Pool for Solana. Encrypted intents via Arcium MPC, aggregate execute via Jupiter, pro-rata distribute. Bots blind, retail wins.",
   metadataBase: new URL("https://tide.fun"),
   openGraph: {
-    title: "Tide — DCA Without MEV",
+    title: "Tide — DCA without MEV",
     description: "Hidden-Liquidity DCA Pool for Solana.",
     url: "https://tide.fun",
     siteName: "Tide",
@@ -28,11 +42,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body className="bg-zinc-950 text-zinc-100 antialiased">
+    <html lang="en" className={`${geist.variable} ${geistMono.variable}`}>
+      <body>
         <Providers>
-          <Nav />
-          {children}
+          <div className="shell">
+            <Nav />
+            {children}
+          </div>
         </Providers>
       </body>
     </html>

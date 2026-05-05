@@ -4,18 +4,15 @@ import { useEffect, useState } from "react";
 import { formatUsdc } from "@/lib/utils";
 
 interface WindowStatusProps {
-  /** Total USDC committed in current window (encrypted aggregate). */
   totalCommitted: bigint;
-  /** Number of unique participants. */
   participantCount: number;
-  /** Window expiry timestamp (Unix seconds). */
   endTs: number;
-  /** Window status: 0=Open, 1=Aggregating, 2=Distributed. */
   status: 0 | 1 | 2 | 3;
 }
 
 /**
- * Real-time window status with countdown.
+ * Real-time window status with countdown. Restyled with the design's class
+ * system; behavior unchanged.
  */
 export function WindowStatusCard({
   totalCommitted,
@@ -37,61 +34,104 @@ export function WindowStatusCard({
   const minutes = Math.floor((remaining % 3600) / 60);
   const seconds = remaining % 60;
 
-  const statusBadge = {
-    0: { label: "Open for commits", color: "text-emerald-400 bg-emerald-950/30" },
-    1: { label: "Aggregating (MPC)", color: "text-amber-400 bg-amber-950/30" },
-    2: { label: "Distributed", color: "text-cyan-400 bg-cyan-950/30" },
-    3: { label: "Failed", color: "text-rose-400 bg-rose-950/30" },
+  const statusInfo = {
+    0: { label: "Open for commits", badge: "badge--good", live: true },
+    1: { label: "Aggregating (MPC)", badge: "badge--warn", live: true },
+    2: { label: "Distributed", badge: "badge--accent", live: false },
+    3: { label: "Failed", badge: "badge--warn", live: false },
   }[status];
 
   return (
-    <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-5">
-      <div className="mb-4 flex items-center justify-between">
-        <h3 className="font-semibold">Current Window</h3>
-        <span
-          className={`rounded-full px-2.5 py-0.5 text-xs ${statusBadge.color}`}
-        >
-          ● {statusBadge.label}
+    <div className="card">
+      <div className="card__head">
+        <span className="card__title">Current window</span>
+        <span className={`badge ${statusInfo.badge}`}>
+          {statusInfo.live && <span className="dot dot--live" />}
+          {statusInfo.label}
         </span>
       </div>
 
-      <div className="mb-5 text-center">
-        <div className="text-xs uppercase tracking-widest text-zinc-500">
+      <div style={{ textAlign: "center", margin: "8px 0 22px" }}>
+        <div
+          className="tiny mute2"
+          style={{
+            letterSpacing: "0.08em",
+            textTransform: "uppercase",
+          }}
+        >
           {status === 0 ? "Closes in" : "Closed"}
         </div>
-        <div className="font-mono text-4xl font-bold tabular-nums text-zinc-100">
+        <div
+          className="mono"
+          style={{
+            fontSize: 38,
+            fontWeight: 600,
+            letterSpacing: "-0.02em",
+            color: "var(--text-0)",
+            marginTop: 6,
+          }}
+        >
           {hours > 0 && (
             <>
-              <span className="text-zinc-300">{hours}</span>
-              <span className="text-zinc-600">h</span>
-              <span className="ml-2"> </span>
+              <span>{hours}</span>
+              <span style={{ color: "var(--text-3)", margin: "0 4px" }}>
+                h
+              </span>
             </>
           )}
-          <span className="text-zinc-300">{minutes.toString().padStart(2, "0")}</span>
-          <span className="text-zinc-600">m</span>
-          <span className="ml-2"> </span>
-          <span className="text-cyan-400">{seconds.toString().padStart(2, "0")}</span>
-          <span className="text-zinc-600">s</span>
+          <span>{String(minutes).padStart(2, "0")}</span>
+          <span style={{ color: "var(--text-3)", margin: "0 4px" }}>m</span>
+          <span style={{ color: "var(--accent)" }}>
+            {String(seconds).padStart(2, "0")}
+          </span>
+          <span style={{ color: "var(--text-3)", margin: "0 4px" }}>s</span>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 border-t border-zinc-800 pt-4 text-sm">
+      <div className="tideline" style={{ marginBottom: 18 }} />
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gap: 16,
+        }}
+      >
         <div>
-          <div className="text-zinc-500">Pool size (encrypted aggregate)</div>
-          <div className="mt-1 font-mono text-2xl text-cyan-400">
+          <div className="tiny mute2">Pool size (encrypted aggregate)</div>
+          <div
+            className="mono"
+            style={{
+              fontSize: 22,
+              fontWeight: 500,
+              color: "var(--accent)",
+              marginTop: 4,
+            }}
+          >
             {formatUsdc(totalCommitted)}
           </div>
         </div>
         <div>
-          <div className="text-zinc-500">Participants</div>
-          <div className="mt-1 font-mono text-2xl text-zinc-100">
+          <div className="tiny mute2">Participants</div>
+          <div
+            className="mono"
+            style={{
+              fontSize: 22,
+              fontWeight: 500,
+              marginTop: 4,
+            }}
+          >
             {participantCount}
           </div>
         </div>
       </div>
 
-      <p className="mt-4 text-xs text-zinc-500">
-        🔒 Individual amounts encrypted via Arcium. Bots see only the aggregate.
+      <p
+        className="tiny mute2"
+        style={{ marginTop: 16, marginBottom: 0, lineHeight: 1.5 }}
+      >
+        Individual amounts encrypted via Arcium MPC. Bots see only the
+        aggregate.
       </p>
     </div>
   );

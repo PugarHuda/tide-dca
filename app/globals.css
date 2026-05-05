@@ -147,24 +147,84 @@ textarea {
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
 }
+.nav__burger {
+  display: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: transparent;
+  border: 1px solid var(--line-2);
+  cursor: pointer;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  transition: border-color 0.15s, background 0.15s;
+}
+.nav__burger:hover {
+  border-color: var(--text-3);
+  background: var(--bg-2);
+}
+.nav__burger span {
+  display: block;
+  width: 16px;
+  height: 1.5px;
+  background: var(--text-1);
+  transition: transform 0.18s ease, opacity 0.18s ease;
+  transform-origin: center;
+}
+.nav__burger span[data-open="true"]:nth-child(1) {
+  transform: translateY(5.5px) rotate(45deg);
+}
+.nav__burger span[data-open="true"]:nth-child(2) {
+  opacity: 0;
+}
+.nav__burger span[data-open="true"]:nth-child(3) {
+  transform: translateY(-5.5px) rotate(-45deg);
+}
+
+.nav__drawer {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--line);
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  animation: risefade 0.15s ease-out;
+}
+.nav__drawer-link {
+  padding: 12px 14px;
+  border-radius: 8px;
+  font-size: 14px;
+  color: var(--text-1);
+  transition: background 0.12s, color 0.12s;
+}
+.nav__drawer-link:hover {
+  background: var(--bg-3);
+  color: var(--text-0);
+}
+.nav__drawer-link[data-active="true"] {
+  background: var(--bg-3);
+  color: var(--accent);
+}
+
 @media (max-width: 720px) {
   .nav {
     gap: 12px;
     padding: 12px 16px;
-    flex-wrap: wrap;
   }
   .nav__net {
     display: none;
   }
-}
-@media (max-width: 480px) {
-  .nav__links {
-    margin-left: 0;
-    gap: 0;
+  .nav__links--desktop {
+    display: none;
   }
-  .nav__link {
-    padding: 6px 8px;
-    font-size: 12.5px;
+  .nav__burger {
+    display: flex;
   }
 }
 .nav__brand {
@@ -884,6 +944,15 @@ textarea {
   padding: 10px 12px 12px;
   border-bottom: 1px solid var(--line-soft);
   margin-bottom: 4px;
+}
+.acct__balance {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 10px 12px 12px;
+  border-bottom: 1px solid var(--line-soft);
+  margin-bottom: 4px;
+  font-size: 13px;
 }
 .acct__item {
   display: flex;

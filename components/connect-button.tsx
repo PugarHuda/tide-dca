@@ -40,6 +40,8 @@ import {
 import { usePrivy } from "@privy-io/react-auth";
 
 import { TideMark } from "./tide-mark";
+import { useUserBalances } from "@/lib/hooks";
+import { formatSol, formatUsdc } from "@/lib/utils";
 
 const PRIVY_APP_ID = process.env.NEXT_PUBLIC_PRIVY_APP_ID ?? "";
 
@@ -322,6 +324,7 @@ function AccountMenu({
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
+  const { solLamports, usdcLamports } = useUserBalances();
 
   useEffect(() => {
     if (!open) return;
@@ -381,6 +384,28 @@ function AccountMenu({
               <span className="tiny mute2">Connected wallet</span>
               <span className="mono" style={{ fontSize: 12 }}>
                 {fullAddress.slice(0, 8)}…{fullAddress.slice(-8)}
+              </span>
+            </div>
+          )}
+          {fullAddress && (
+            <div
+              className="acct__balance"
+              role="presentation"
+              aria-label="Wallet balance"
+            >
+              <span>
+                <span className="tiny mute2" style={{ display: "block" }}>
+                  USDC
+                </span>
+                <span className="mono" style={{ color: "var(--accent)" }}>
+                  {formatUsdc(usdcLamports)}
+                </span>
+              </span>
+              <span style={{ textAlign: "right" }}>
+                <span className="tiny mute2" style={{ display: "block" }}>
+                  SOL
+                </span>
+                <span className="mono">{formatSol(solLamports, 4)}</span>
               </span>
             </div>
           )}

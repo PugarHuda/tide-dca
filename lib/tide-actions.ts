@@ -50,6 +50,7 @@ import {
   findWindowPda,
 } from "./anchor-client";
 import { fetchQuote, fetchSwapInstructions } from "./jupiter";
+import { decodeAnchorError } from "./errors";
 
 /** Anchor instruction discriminator: first 8 bytes of sha256("global:<name>"). */
 function discriminator(snakeName: string): Buffer {
@@ -133,7 +134,7 @@ export async function submitSetupDcaPosition(
     await connection.confirmTransaction(signature, "confirmed");
     return { ok: true, signature, poolPda, positionPda };
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = decodeAnchorError(err);
     return { ok: false, error: message };
   }
 }
@@ -221,7 +222,7 @@ export async function submitCommitIntent(
     await connection.confirmTransaction(signature, "confirmed");
     return { ok: true, signature, poolPda: params.poolPda, positionPda: intentPda };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    return { ok: false, error: decodeAnchorError(err) };
   }
 }
 
@@ -288,7 +289,7 @@ export async function submitInitPool(
     await connection.confirmTransaction(signature, "confirmed");
     return { ok: true, signature, poolPda, positionPda: poolPda };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    return { ok: false, error: decodeAnchorError(err) };
   }
 }
 
@@ -331,7 +332,7 @@ export async function submitInitWindow(
     await connection.confirmTransaction(signature, "confirmed");
     return { ok: true, signature, poolPda, positionPda: windowPda };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    return { ok: false, error: decodeAnchorError(err) };
   }
 }
 
@@ -405,7 +406,7 @@ export async function submitClaimAllocation(
     await connection.confirmTransaction(signature, "confirmed");
     return { ok: true, signature, poolPda: params.poolPda, positionPda };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    return { ok: false, error: decodeAnchorError(err) };
   }
 }
 
@@ -443,7 +444,7 @@ export async function submitTriggerAggregate(
     await connection.confirmTransaction(signature, "confirmed");
     return { ok: true, signature, poolPda, positionPda: windowPda };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    return { ok: false, error: decodeAnchorError(err) };
   }
 }
 
@@ -594,6 +595,6 @@ export async function submitExecuteSwap(
     await connection.confirmTransaction(signature, "confirmed");
     return { ok: true, signature, poolPda: params.poolPda, positionPda: params.windowPda };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    return { ok: false, error: decodeAnchorError(err) };
   }
 }

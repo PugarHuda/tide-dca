@@ -252,6 +252,74 @@ export function useUserIntent(windowPubkey: PublicKey | null): {
 }
 
 /**
+ * Live SOL + USDC balance for a connected wallet. Drives the balance pill
+ * in the nav so users see "I have $X USDC available" before clicking
+ * commit. Subscribes to account changes so balance updates after every tx
+ * without a manual refresh.
+ */
+export function useUserBalances(): {
+  solLamports: bigint;
+  usdcLamports: bigint;
+  loading: boolean;
+} {
+  const { connection } = useConnection();
+  const { publicKey } = useTideWallet();
+  const [solLamports, setSolLamports] = useState<bigint>(0n);
+  const [usdcLamports, setUsdcLamports] = useState<bigint>(0n);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!publicKey) {
+      setSolLamports(0n);
+      setUsdcLamports(0n);
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+
+    // SOL balance is on the wallet's own account
+    connection
+      .getBalance(publicKey, "confirmed")
+      .then((lamports) => !cancelled && setSolLamports(BigInt(lamports)))
+      .catch(() => !cancelled && setSolLamports(0n));
+
+    // USDC balance lives in the user's USDC ATA. We import lazily to keep
+    // hot module deps small.
+    const loadUsdc = async () => {
+      try {
+        const { getAssociatedTokenAddressSync } = await import(
+          "@solana/spl-token"
+        );
+        const ata = getAssociatedTokenAddressSync(USDC_MINT, publicKey);
+        const balance = await connection.getTokenAccountBalance(ata);
+        if (!cancelled) {
+          setUsdcLamports(BigInt(balance.value.amount));
+        }
+      } catch {
+        // ATA might not exist yet — that's fine, balance is 0
+        if (!cancelled) setUsdcLamports(0n);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    void loadUsdc();
+
+    // Subscribe so balance refreshes after each tx (commit, claim, etc).
+    const solSubId = connection.onAccountChange(publicKey, (info) => {
+      setSolLamports(BigInt(info.lamports));
+    });
+
+    return () => {
+      cancelled = true;
+      void connection.removeAccountChangeListener(solSubId);
+    };
+  }, [connection, publicKey?.toBase58()]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return { solLamports, usdcLamports, loading };
+}
+
+/**
  * Fetch every settled Window account for the canonical pool, ordered by
  * window number ascending. Settled = status >= 2 (Distributed). Used to
  * build the cumulative savings chart from real history.

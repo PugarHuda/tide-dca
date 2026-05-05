@@ -6,6 +6,7 @@ import type { Route } from "next";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 
 import { SavingsChart } from "@/components/savings-chart";
+import { WindowHistoryTable } from "@/components/window-history";
 import { WindowStatusCard } from "@/components/window-status-card";
 import { useTideWallet } from "@/lib/hooks/use-tide-wallet";
 import {
@@ -19,6 +20,7 @@ import {
   submitCommitIntent,
 } from "@/lib/tide-actions";
 import { useToast } from "@/components/toast";
+import { useCountUp } from "@/lib/hooks/use-count-up";
 import {
   bpsToPct,
   calculateSavings,
@@ -39,6 +41,20 @@ export default function DashboardPage() {
   const { intent: pendingIntent } = useUserIntent(windowPubkey);
   const [claiming, setClaiming] = useState(false);
   const [committing, setCommitting] = useState(false);
+
+  // Pre-compute the headline savings number (defaults to 0n when pool /
+  // position aren't ready so the hook order stays stable across renders).
+  const headlineSavedRaw =
+    pool && position
+      ? calculateSavings(
+          currentWindow?.effectiveSlippageBps ?? pool.feeBps,
+          STANDALONE_SLIPPAGE_BPS_DEFAULT,
+          position.totalDeposited,
+        )
+      : 0n;
+  const animatedSavedDollars = useCountUp(
+    Number(headlineSavedRaw) / 1_000_000,
+  );
 
   const handleClaim = async () => {
     if (!windowPubkey || !currentWindow) return;
@@ -152,7 +168,7 @@ export default function DashboardPage() {
           <h1 className="page__h1" style={{ marginTop: 8 }}>
             Saved{" "}
             <span className="mono" style={{ color: "var(--accent)" }}>
-              {formatUsdc(totalSaved)}
+              ${animatedSavedDollars.toFixed(2)}
             </span>{" "}
             so far
           </h1>
@@ -317,13 +333,16 @@ export default function DashboardPage() {
         <SavingsChart />
       </section>
 
+      <section style={{ marginBottom: 28 }}>
+        <WindowHistoryTable />
+      </section>
+
       <p
         className="tiny mute2"
         style={{ textAlign: "center", marginTop: 24 }}
       >
-        Live data via @solana/web3.js account subscriptions. Savings curve
-        uses a synthetic series until we backfill window history from Helius
-        DAS.
+        Live data via @solana/web3.js account subscriptions. Window history
+        + savings chart hydrate as windows settle on chain.
       </p>
     </main>
   );

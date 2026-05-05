@@ -5,28 +5,30 @@
  * detected Solana wallet (Phantom, Solflare, Backpack, …) plus a Privy email
  * row when NEXT_PUBLIC_PRIVY_APP_ID is set.
  *
- * Two non-obvious wires worth knowing about:
+ * Three non-obvious wires worth knowing about:
  *
  *   • Modal is portaled to document.body via createPortal because the parent
  *     <nav> has `backdrop-filter: blur` set in globals.css, which establishes
  *     a containing block for fixed-positioned descendants. Without the
- *     portal the .modal-bg "fixed inset:0" is clamped to the nav box,
+ *     portal the .modal-bg `fixed inset:0` is clamped to the nav box,
  *     producing the "melebar di navbar" failure mode.
  *
  *   • A `mounted` flag gates rendering of any wallet/Privy-restored state
  *     until after hydration. wallet-adapter's autoConnect can rehydrate a
- *     prior session, which makes the first client render diverge from the
- *     server HTML (React error #418, hydration text mismatch). Returning
- *     the inert "Connect wallet" button on the very first paint keeps the
- *     two trees identical.
+ *     prior session, which would make the first client render diverge from
+ *     the server HTML (React error #418). Returning the inert
+ *     "Connect wallet" button on the very first paint keeps the two trees
+ *     identical.
  *
- *   • Connection flow uses the canonical wallet-adapter pattern: pick a
- *     wallet → `select(name)` → a useEffect calls `connect()` once the
- *     freshly-selected wallet appears in context. Calling adapter.connect()
- *     synchronously after select() races the context update.
+ *   • adapter.connect() is called synchronously inside onPickWallet so the
+ *     browser's user-gesture chain stays intact; pushing it through a
+ *     useEffect (which we tried) lets Phantom silently block the popup.
+ *     wallet.select(name) still runs alongside so the wallet-adapter
+ *     context picks up the connection events emitted by the adapter.
  *
- * All visual styling lives in app/globals.css under "Connect modal options"
- * — no styled-jsx so the modal paints styled on first open.
+ * All visual styling lives in app/globals.css under "Modal" + "Connect
+ * modal options" + "Account menu" sections — no styled-jsx so everything
+ * paints correctly on first render (no FOUC).
  */
 
 import { useEffect, useRef, useState } from "react";

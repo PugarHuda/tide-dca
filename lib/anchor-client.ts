@@ -1,17 +1,13 @@
 /**
- * Anchor program client wrapper for Tide.
+ * PDA derivation helpers for the Tide program.
  *
- * Provides:
- * - getProgram(provider) — typed Program instance
- * - PDA derivation helpers (pool, position, window, intent, escrow)
- * - Account fetch helpers
- *
- * TODO when IDL generated:
- * - Import Program type from `target/types/tide.ts`
- * - Replace `any` with proper types
+ * Pure key-derivation only — no Anchor Program instance lives here. Tide's
+ * frontend uses raw @solana/web3.js + hand-rolled discriminators in
+ * lib/tide-actions.ts, so we never need a typed Program<T>. If IDL access
+ * lands later, instantiate it directly from `target/idl/tide.json` at the
+ * call site.
  */
 
-import { type AnchorProvider, Program } from "@coral-xyz/anchor";
 import { PublicKey } from "@solana/web3.js";
 
 import {
@@ -22,19 +18,6 @@ import {
   SEED_INTENT,
   SEED_ESCROW,
 } from "./constants";
-
-/** Get typed Tide program instance. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function getTideProgram(provider: AnchorProvider): Program<any> {
-  // TODO: import IDL from `target/idl/tide.json` after first `anchor build`
-  // const idl = require("../target/idl/tide.json");
-  // return new Program(idl, provider);
-  throw new Error(
-    "IDL not yet generated. Run `anchor build` first, then update this file to import target/idl/tide.json",
-  );
-}
-
-// ─── PDA derivation helpers ───
 
 export function findPoolPda(
   inputMint: PublicKey,
@@ -85,9 +68,9 @@ export function findIntentPda(
 
 /**
  * Escrow authority — the only custom PDA in the escrow set. Both input
- * (USDC) and output (target mint) escrows are now standard ATAs owned by
- * this authority, so they're derived via @solana/spl-token's
- * getAssociatedTokenAddressSync(mint, authority) at the call site.
+ * (USDC) and output (target mint) escrows are standard ATAs owned by this
+ * authority, so they're derived via @solana/spl-token's
+ * getAssociatedTokenAddressSync(mint, authority, true) at the call site.
  */
 export function findEscrowAuthorityPda(
   window: PublicKey,

@@ -14,12 +14,12 @@ import {
   useUserIntent,
   useUserPosition,
 } from "@/lib/hooks";
-import { submitClaimAllocation } from "@/lib/tide-actions";
+import { submitClaimAllocation, submitCommitIntent } from "@/lib/tide-actions";
 import { calculateSavings, bpsToPct, formatSol, formatUsdc } from "@/lib/utils";
 
 const STANDALONE_SLIPPAGE_BPS_DEFAULT = 50; // assumed retail spot/DCA reference
 
-type ClaimState =
+type ActionState =
   | { kind: "idle" }
   | { kind: "submitting" }
   | { kind: "success"; signature: string }
@@ -33,7 +33,8 @@ export default function DashboardPage() {
   const { position } = useUserPosition();
   const { window: currentWindow, windowPubkey } = useCurrentWindow();
   const { intent: pendingIntent } = useUserIntent(windowPubkey);
-  const [claimState, setClaimState] = useState<ClaimState>({ kind: "idle" });
+  const [claimState, setClaimState] = useState<ActionState>({ kind: "idle" });
+  const [commitState, setCommitState] = useState<ActionState>({ kind: "idle" });
 
   const handleClaim = async () => {
     if (!windowPubkey || !currentWindow) return;
@@ -44,6 +45,23 @@ export default function DashboardPage() {
       windowNumber: currentWindow.windowNumber,
     });
     setClaimState(
+      result.ok
+        ? { kind: "success", signature: result.signature }
+        : { kind: "error", message: result.error },
+    );
+  };
+
+  const handleCommit = async () => {
+    if (!windowPubkey || !currentWindow || !position) return;
+    setCommitState({ kind: "submitting" });
+    const result = await submitCommitIntent(connection, wallet, {
+      poolPda: poolPubkey,
+      windowPda: windowPubkey,
+      windowNumber: currentWindow.windowNumber,
+      amountUsdc: Number(position.amountPerWindow) / 1_000_000,
+      maxSlippageBps: position.maxSlippageBps,
+    });
+    setCommitState(
       result.ok
         ? { kind: "success", signature: result.signature }
         : { kind: "error", message: result.error },
@@ -134,6 +152,58 @@ export default function DashboardPage() {
           value={position.lastWindow.toString()}
         />
       </section>
+
+      {/* Commit to current open window — only when user hasn't committed yet */}
+      {currentWindow && currentWindow.status === 0 && !pendingIntent && (
+        <section className="mb-10 rounded-lg border border-cyan-500/30 bg-cyan-950/20 p-5">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <h3 className="font-semibold">
+                Commit to window #{currentWindow.windowNumber.toString()}
+              </h3>
+              <p className="text-sm text-zinc-400">
+                Deposit {formatUsdc(position.amountPerWindow)} into the encrypted
+                pool. Your individual amount stays private; only the aggregate
+                lands on chain.
+              </p>
+            </div>
+            <button
+              onClick={() => void handleCommit()}
+              disabled={commitState.kind === "submitting"}
+              className="rounded-md bg-cyan-500 px-4 py-2 font-medium text-zinc-900 transition hover:bg-cyan-400 disabled:opacity-50"
+            >
+              {commitState.kind === "submitting" ? "Committing…" : "Commit"}
+            </button>
+          </div>
+          {commitState.kind === "success" && (
+            <p className="mt-3 text-xs text-emerald-300">
+              ✓ Committed.{" "}
+              <a
+                className="underline decoration-dotted underline-offset-2"
+                href={`https://explorer.solana.com/tx/${commitState.signature}?cluster=devnet`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                View on Solana Explorer
+              </a>
+            </p>
+          )}
+          {commitState.kind === "error" && (
+            <p className="mt-3 text-xs text-rose-300">✗ {commitState.message}</p>
+          )}
+        </section>
+      )}
+
+      {/* Already committed — show waiting state */}
+      {currentWindow && currentWindow.status === 0 && pendingIntent && (
+        <section className="mb-10 rounded-lg border border-zinc-800 bg-zinc-900/30 p-4">
+          <p className="text-sm text-zinc-400">
+            ✓ You committed {formatUsdc(pendingIntent.amount)} to window #
+            {currentWindow.windowNumber.toString()}. Waiting for window to
+            close + aggregate.
+          </p>
+        </section>
+      )}
 
       {pendingClaim > 0n && (
         <section className="mb-10 rounded-lg border border-cyan-500/30 bg-cyan-950/20 p-5">

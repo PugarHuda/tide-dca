@@ -110,6 +110,44 @@ export default function AdminPage() {
       ? "—"
       : ["Open", "Aggregating", "Distributed", "Failed"][currentWindow.status];
 
+  // ── trigger_aggregate gating ──
+  // Program requires (a) clock >= window.end_ts AND (b) total_committed >= min_pool_size.
+  // Reflect both in the UI so users don't button-mash through an inevitable revert.
+  const nowSec = Math.floor(Date.now() / 1000);
+  const windowExpired =
+    !!currentWindow && nowSec >= Number(currentWindow.endTs);
+  const aggregateThresholdMet =
+    !!currentWindow &&
+    !!pool &&
+    currentWindow.totalCommittedUsdc >= pool.minPoolSizeUsdc;
+  const secondsUntilExpiry =
+    currentWindow ? Math.max(0, Number(currentWindow.endTs) - nowSec) : 0;
+  const expiryLabel =
+    secondsUntilExpiry > 3600
+      ? `${Math.floor(secondsUntilExpiry / 3600)}h ${Math.floor((secondsUntilExpiry % 3600) / 60)}m`
+      : secondsUntilExpiry > 60
+        ? `${Math.floor(secondsUntilExpiry / 60)}m ${secondsUntilExpiry % 60}s`
+        : `${secondsUntilExpiry}s`;
+
+  const triggerAggregateDisabled =
+    !currentWindow ||
+    currentWindow.status !== 0 ||
+    !windowExpired ||
+    !aggregateThresholdMet ||
+    !wallet.publicKey;
+
+  const triggerAggregateReason = !wallet.publicKey
+    ? "Connect wallet"
+    : !currentWindow
+      ? "No active window"
+      : currentWindow.status !== 0
+        ? `Window not open (status: ${windowStatusLabel})`
+        : !windowExpired
+          ? `Window closes in ${expiryLabel}`
+          : !aggregateThresholdMet && pool
+            ? `Below threshold: ${formatUsdc(currentWindow.totalCommittedUsdc)} of ${formatUsdc(pool.minPoolSizeUsdc)} required`
+            : undefined;
+
   return (
     <main className="mx-auto max-w-3xl px-6 py-16">
       <header className="mb-10">
@@ -207,18 +245,14 @@ export default function AdminPage() {
 
       <ActionCard
         title="trigger_aggregate"
-        description={`Closes the active window for new commits and flips status to Aggregating. Current status: ${windowStatusLabel}.`}
-        buttonLabel="Trigger Aggregate"
-        disabled={!currentWindow || currentWindow.status !== 0 || !wallet.publicKey}
-        disabledReason={
-          !wallet.publicKey
-            ? "Connect wallet"
-            : !currentWindow
-              ? "No active window"
-              : currentWindow.status !== 0
-                ? `Window not open (status: ${windowStatusLabel})`
-                : undefined
+        description={
+          currentWindow && pool
+            ? `Closes window #${currentWindow.windowNumber.toString()} and flips status to Aggregating. Status: ${windowStatusLabel}. Committed: ${formatUsdc(currentWindow.totalCommittedUsdc)} of ${formatUsdc(pool.minPoolSizeUsdc)} min.`
+            : "Closes the active window and flips status to Aggregating."
         }
+        buttonLabel="Trigger Aggregate"
+        disabled={triggerAggregateDisabled}
+        disabledReason={triggerAggregateReason}
         state={aggregateState}
         onClick={handleTriggerAggregate}
       />

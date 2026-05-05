@@ -139,22 +139,90 @@ export async function submitSetupDcaPosition(
 }
 
 /**
- * Submit commit_intent. Requires an open Window already exists for the pool.
- *
- * Currently builder-only — does NOT include token transfer accounts (escrow
- * setup) so this will fail on chain until we wire SPL associated token PDAs.
- * Tracked as TODO for the demo pivot.
+ * Submit commit_intent — user deposits USDC into the escrow for the active
+ * window and registers a (currently stub-encrypted) intent record. Pre-reqs:
+ *   - Pool exists, an Open window exists for it.
+ *   - User has setup_dca_position'd previously (Position PDA must exist).
+ *   - User has at least `amountUsdc` of devnet USDC in their owner ATA
+ *     (Circle faucet: https://faucet.circle.com).
  */
+
+export type CommitIntentParams = {
+  poolPda: PublicKey;
+  windowPda: PublicKey;
+  windowNumber: bigint;
+  /** Amount of USDC to commit, human-readable units. */
+  amountUsdc: number;
+  /** From DcaPosition.maxSlippageBps — feeds into the intent hash. */
+  maxSlippageBps: number;
+};
+
 export async function submitCommitIntent(
-  _connection: Connection,
-  _wallet: SignerWallet,
-  _params: { encryptedIntentHash: Uint8Array; amountUsdc: number },
+  connection: Connection,
+  wallet: SignerWallet,
+  params: CommitIntentParams,
 ): Promise<SubmitResult> {
-  return {
-    ok: false,
-    error:
-      "commit_intent wiring pending — needs SPL ATA derivation + escrow account list. See lib/tide-actions.ts TODO.",
-  };
+  if (!wallet.publicKey) return { ok: false, error: "Wallet not connected" };
+  if (!wallet.sendTransaction) return { ok: false, error: "Wallet does not support sendTransaction" };
+
+  const owner = wallet.publicKey;
+  const [positionPda] = findDcaPositionPda(owner, params.poolPda);
+  const [intentPda] = findIntentPda(params.windowPda, owner);
+  const [escrowAuthority] = findEscrowAuthorityPda(params.windowPda);
+  const ownerInputAta = getAssociatedTokenAddressSync(USDC_MINT, owner);
+  const escrowInputAta = getAssociatedTokenAddressSync(USDC_MINT, escrowAuthority, true);
+
+  // Derive the (currently stub-encrypted) intent hash. Real Arcium SDK call
+  // lives in lib/arcium.ts and gets swapped in once Cohort 2 access lands.
+  const { encryptIntent } = await import("./arcium");
+  const intent = await encryptIntent({
+    amount: BigInt(Math.round(params.amountUsdc * 1_000_000)),
+    maxSlippageBps: params.maxSlippageBps,
+    userPubkey: owner.toBase58(),
+    windowPubkey: params.windowPda.toBase58(),
+  });
+
+  const amountLamports = BigInt(Math.round(params.amountUsdc * 1_000_000));
+
+  // Args: [u8;32] encrypted_intent_hash + u64 amount = 40 bytes total
+  const argBuf = Buffer.alloc(40);
+  Buffer.from(intent.intentHash).copy(argBuf, 0);
+  argBuf.writeBigUInt64LE(amountLamports, 32);
+
+  const data = Buffer.concat([discriminator("commit_intent"), argBuf]);
+
+  // Account order matches programs/tide/src/instructions/commit_intent.rs
+  const ix = new TransactionInstruction({
+    programId: TIDE_PROGRAM_ID,
+    keys: [
+      { pubkey: owner, isSigner: true, isWritable: true },
+      { pubkey: positionPda, isSigner: false, isWritable: false },
+      { pubkey: params.poolPda, isSigner: false, isWritable: true },
+      { pubkey: params.windowPda, isSigner: false, isWritable: true },
+      { pubkey: intentPda, isSigner: false, isWritable: true },
+      { pubkey: USDC_MINT, isSigner: false, isWritable: false },
+      { pubkey: ownerInputAta, isSigner: false, isWritable: true },
+      { pubkey: escrowAuthority, isSigner: false, isWritable: false },
+      { pubkey: escrowInputAta, isSigner: false, isWritable: true },
+      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+      { pubkey: ASSOCIATED_TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+      { pubkey: SYSVAR_RENT_PUBKEY, isSigner: false, isWritable: false },
+    ],
+    data,
+  });
+
+  const tx = new Transaction()
+    .add(ComputeBudgetProgram.setComputeUnitLimit({ units: 300_000 }))
+    .add(ix);
+
+  try {
+    const signature = await wallet.sendTransaction(tx, connection);
+    await connection.confirmTransaction(signature, "confirmed");
+    return { ok: true, signature, poolPda: params.poolPda, positionPda: intentPda };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
 }
 
 /** Compute the next window PDA from a pool's current `windowCounter` field. */

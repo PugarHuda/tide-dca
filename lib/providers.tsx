@@ -3,15 +3,23 @@
 /**
  * Tide app-level providers.
  *
- * Stack:
- * - Privy <PrivyProvider> — embedded wallet for non-crypto onboarding
- * - Solana ConnectionProvider — Helius RPC
- * - WalletProvider (Wallet Standard) — auto-detects Phantom/Solflare/Backpack
- * - WalletModalProvider — UI for wallet selection
+ * Two complementary auth surfaces, intentionally separated:
  *
- * Privy is the OUTER layer — provides email/social login which auto-creates
- * embedded Solana wallet. Crypto-native users tetap dapat connect Phantom
- * via Wallet Standard di inner WalletProvider.
+ *   1. @solana/wallet-adapter — handles existing Solana wallets (Phantom,
+ *      Solflare, Backpack) via the Wallet Standard registry. This is the
+ *      crypto-native path; ConnectButton in the nav uses WalletMultiButton.
+ *
+ *   2. Privy — handles email/social login for users who don't have a
+ *      Solana wallet yet. Privy auto-creates an embedded Solana wallet on
+ *      first login. PrivyEmbeddedBridge publishes that wallet's pubkey
+ *      into TideWalletContext so useTideWallet() can return it.
+ *
+ * IMPORTANT: we deliberately do NOT pass `externalWallets.solana.connectors`
+ * to Privy. That config registers Privy as a Wallet Standard connector,
+ * which causes "Privy" to appear in WalletMultiButton's modal alongside
+ * Phantom — picking it routes to Privy's own modal which historically
+ * fell back to Ethereum mode mid-session. Privy is for embedded wallets
+ * here, period; external wallet handling stays with wallet-adapter.
  */
 
 import { useMemo, type ReactNode } from "react";
@@ -21,13 +29,10 @@ import {
 } from "@solana/wallet-adapter-react";
 import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
 import { PrivyProvider } from "@privy-io/react-auth";
-import { toSolanaWalletConnectors } from "@privy-io/react-auth/solana";
 import "@solana/wallet-adapter-react-ui/styles.css";
 
 import { CURRENT_NETWORK, RPC_URLS } from "./constants";
 import { PrivyEmbeddedBridge } from "./privy-bridge";
-
-const solanaConnectors = toSolanaWalletConnectors();
 
 const PRIVY_APP_ID = process.env.NEXT_PUBLIC_PRIVY_APP_ID ?? "";
 
@@ -43,7 +48,7 @@ export function Providers({ children }: { children: ReactNode }) {
     </ConnectionProvider>
   );
 
-  // Graceful fallback if Privy not configured
+  // Graceful fallback if Privy not configured (e.g. local dev without app ID)
   if (!PRIVY_APP_ID) return inner;
 
   return (
@@ -53,14 +58,10 @@ export function Providers({ children }: { children: ReactNode }) {
         appearance: {
           theme: "dark",
           accentColor: "#06b6d4",
-          // Without this Privy defaults to ethereum-only and the connect
-          // modal hides Phantom/Solflare in favor of MetaMask et al.
           walletChainType: "solana-only",
         },
-        loginMethods: ["email", "google", "twitter", "wallet"],
-        externalWallets: {
-          solana: { connectors: solanaConnectors },
-        },
+        // Email/social only — wallet connection is wallet-adapter's job.
+        loginMethods: ["email", "google", "twitter"],
         embeddedWallets: {
           ethereum: { createOnLogin: "off" },
           solana: { createOnLogin: "users-without-wallets" },

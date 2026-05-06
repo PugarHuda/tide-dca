@@ -15,12 +15,13 @@
  * the mechanism, not Tide's actual traction.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
 import { useCurrentWindow, usePool } from "@/lib/hooks";
 import { CURRENT_NETWORK } from "@/lib/constants";
 import { formatUsdc } from "@/lib/utils";
+import { useInView } from "@/lib/hooks/use-in-view";
 
 const WINDOW_DURATION_S = 3600;
 
@@ -84,16 +85,36 @@ export default function LandingPage() {
         windowNumber={currentWindow?.windowNumber ?? 0n}
         isLive={!!currentWindow}
       />
-      <Stats
-        totalVolumeLamports={pool?.totalVolumeProcessed ?? 0n}
-        windowCounter={pool?.windowCounter ?? 0n}
-      />
-      <HowItWorks />
-      <Comparison />
-      <Proof />
-      <FinalCta />
+      <Reveal>
+        <Stats
+          totalVolumeLamports={pool?.totalVolumeProcessed ?? 0n}
+          windowCounter={pool?.windowCounter ?? 0n}
+        />
+      </Reveal>
+      <Reveal>
+        <HowItWorks />
+      </Reveal>
+      <Reveal>
+        <Comparison />
+      </Reveal>
+      <Reveal>
+        <Proof />
+      </Reveal>
+      <Reveal>
+        <FinalCta />
+      </Reveal>
       <Footer />
     </main>
+  );
+}
+
+/** Wrap a section so it fades + lifts in once the user scrolls to it. */
+function Reveal({ children }: { children: React.ReactNode }) {
+  const [ref, seen] = useInView<HTMLDivElement>();
+  return (
+    <div ref={ref} className="reveal" data-visible={seen}>
+      {children}
+    </div>
   );
 }
 
@@ -114,20 +135,16 @@ function Hero({
   windowNumber: bigint;
   isLive: boolean;
 }) {
-  const eyebrowText = isLive
-    ? participantCount > 0
-      ? `Live on Solana ${CURRENT_NETWORK} · ${participantCount} ${participantCount === 1 ? "depositor" : "depositors"} this window`
-      : `Live on Solana ${CURRENT_NETWORK} · early access — first window open`
-    : `Solana ${CURRENT_NETWORK} · awaiting first window`;
-
   return (
     <section className="hero">
       <CurrentLines count={9} opacity={0.08} />
       <div className="hero__inner">
         <div className="hero__copy">
-          <span className="eyebrow">
-            <span className="dot dot--live" /> {eyebrowText}
-          </span>
+          <EyebrowTicker
+            isLive={isLive}
+            participantCount={participantCount}
+            windowNumber={windowNumber}
+          />
           <h1 className="hero__h">
             DCA without MEV.
             <br />
@@ -193,6 +210,44 @@ function TrustItem({ label, v }: { label: string; v: string }) {
   );
 }
 
+function EyebrowTicker({
+  isLive,
+  participantCount,
+  windowNumber,
+}: {
+  isLive: boolean;
+  participantCount: number;
+  windowNumber: bigint;
+}) {
+  const facts = useMemo(() => {
+    const live = isLive
+      ? participantCount > 0
+        ? `Window #${windowNumber.toString()} open · ${participantCount} ${participantCount === 1 ? "depositor" : "depositors"}`
+        : `Window #${windowNumber.toString()} open · waiting for first depositor`
+      : `Solana ${CURRENT_NETWORK} · awaiting first window`;
+    return [
+      live,
+      "Encrypted intents · Arcium MPC layer",
+      "Single Jupiter swap · zero MEV surface",
+    ];
+  }, [isLive, participantCount, windowNumber]);
+
+  const [idx, setIdx] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setIdx((i) => (i + 1) % facts.length), 3500);
+    return () => clearInterval(id);
+  }, [facts.length]);
+
+  return (
+    <span className="eyebrow eyebrow--ticker">
+      <span className="dot dot--live" />
+      <span key={idx} className="eyebrow__cycle">
+        {facts[idx]}
+      </span>
+    </span>
+  );
+}
+
 function HeroPanel({
   openRemainingS,
   fillPct,
@@ -251,33 +306,87 @@ function HeroPanel({
 
       <div className="tideline" style={{ margin: "20px 0" }} />
 
-      <div className="hero-panel__row">
-        <span className="tiny muted">Without Tide (solo)</span>
-        <span className="mono tiny" style={{ color: "var(--warn)" }}>
-          ~0.51% · −$0.51 per $100
+      <SavingsCalculator />
+    </div>
+  );
+}
+
+function SavingsCalculator() {
+  const [weekly, setWeekly] = useState("100");
+  const weeklyN = Math.max(0, parseFloat(weekly) || 0);
+
+  // Slippage gap heuristic: 0.51% solo vs 0.05% pooled = 0.46% delta. At
+  // weekly DCA over 52 weeks, the absolute saved-per-year is:
+  //   savings = weekly * 52 * 0.0046
+  const annualSavings = weeklyN * 52 * 0.0046;
+  const annualVolume = weeklyN * 52;
+
+  const presets = [50, 100, 250, 500];
+
+  return (
+    <div className="savings">
+      <div className="savings__head">
+        <span className="eyebrow" style={{ margin: 0 }}>
+          Savings calculator
         </span>
+        <span className="tiny mute2">vs solo Jupiter DCA</span>
       </div>
-      <div className="hero-panel__row">
-        <span className="tiny muted">With Tide (target)</span>
-        <span className="mono tiny" style={{ color: "var(--accent)" }}>
-          ~0.05% · −$0.05 per $100
-        </span>
+
+      <div className="savings__row">
+        <span className="tiny mute2">I DCA</span>
+        <div className="savings__input-wrap">
+          <span
+            className="mono mute2"
+            style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)" }}
+          >
+            $
+          </span>
+          <input
+            className="savings__input mono"
+            type="number"
+            min={0}
+            step={5}
+            value={weekly}
+            onChange={(e) => setWeekly(e.target.value)}
+            inputMode="decimal"
+          />
+        </div>
+        <span className="tiny mute2">/ week</span>
       </div>
-      <div
-        className="hero-panel__row"
-        style={{
-          marginTop: 6,
-          paddingTop: 10,
-          borderTop: "1px solid var(--line)",
-        }}
-      >
-        <span style={{ fontWeight: 500 }}>You save</span>
-        <span
-          className="mono"
-          style={{ color: "var(--accent)", fontWeight: 600 }}
-        >
-          $0.46 / $100
-        </span>
+
+      <div className="savings__chips">
+        {presets.map((v) => (
+          <button
+            type="button"
+            key={v}
+            className="savings__chip"
+            data-active={weeklyN === v}
+            onClick={() => setWeekly(String(v))}
+          >
+            ${v}
+          </button>
+        ))}
+      </div>
+
+      <div className="savings__out">
+        <div>
+          <div className="tiny mute2">You save</div>
+          <div
+            className="mono savings__big"
+            style={{ color: "var(--accent)" }}
+          >
+            ${annualSavings.toFixed(2)}
+          </div>
+          <div className="tiny mute2">per year on ${annualVolume.toLocaleString()} volume</div>
+        </div>
+        <div className="savings__delta">
+          <span className="mono tiny" style={{ color: "var(--warn)" }}>
+            solo · ~0.51%
+          </span>
+          <span className="mono tiny" style={{ color: "var(--accent)" }}>
+            tide · ~0.05%
+          </span>
+        </div>
       </div>
     </div>
   );

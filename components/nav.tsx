@@ -17,11 +17,28 @@ const LINKS = [
 export function Nav() {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [scrolledPastHero, setScrolledPastHero] = useState(false);
 
   // Close mobile menu on route change so the user sees the new page,
   // not the open hamburger.
   useEffect(() => {
     setMenuOpen(false);
+  }, [pathname]);
+
+  // Show a sticky "Start DCA" CTA in the nav once the user has scrolled
+  // past the hero on the landing page. Hides on every other route since
+  // the CTA only makes sense on the marketing page.
+  useEffect(() => {
+    if (pathname !== "/") {
+      setScrolledPastHero(false);
+      return;
+    }
+    const onScroll = () => {
+      setScrolledPastHero(window.scrollY > window.innerHeight * 0.7);
+    };
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
   }, [pathname]);
 
   return (
@@ -43,6 +60,15 @@ export function Nav() {
         ))}
       </div>
       <div className="nav__spacer" />
+      {pathname === "/" && (
+        <Link
+          href="/setup"
+          className="btn btn--primary btn--sm nav__cta"
+          data-visible={scrolledPastHero}
+        >
+          Start DCA
+        </Link>
+      )}
       <span className="nav__net">solana {CURRENT_NETWORK}</span>
       <ConnectButton />
       <button

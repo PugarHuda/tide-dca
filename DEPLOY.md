@@ -112,7 +112,7 @@ npm run dev
    this between cycles; in production a cron will hit the same instruction.
 
 3. **mint_test_usdc** *(devnet only)* — `USDC_MINT_DEVNET` is a custom SPL
-   mint we control (`2SN7pKbrbsiNBUJ28d6yU2X8miVF36ETFwqwy3Mt3UEe`, 6
+   mint we control (`4YhohVQ8RmudchbAe2UBXcrdduVYkuqyU7hHviz2MSvT`, 6
    decimals). Mint authority = the wallet listed during `spl-token
    create-token --mint-authority`. Click "Mint test USDC to my wallet" with
    that wallet connected to airdrop yourself test USDC for the
@@ -167,7 +167,7 @@ Not for the hackathon. Capture for after-submission planning.
 | `cargo build-sbf: privilege not held` | Dev Mode off | Enable Dev Mode + restart terminal |
 | `anchor build` finishes but no `target/idl/tide.json` | Build failed silently mid-compile | Check `cargo check` first; look for warnings about deprecated APIs |
 | `Program Id mismatch` after deploy | Stale `target/deploy/tide-keypair.json` | Delete `target/deploy/`, regenerate, rebuild, redeploy |
-| `Account not found` on init_pool | USDC mint pubkey wrong for cluster | Verify `USDC_MINT_DEVNET` in `lib/constants.ts` matches the deployed test mint (`2SN7pKbrbsiNBUJ28d6yU2X8miVF36ETFwqwy3Mt3UEe`) |
+| `Account not found` on init_pool | USDC mint pubkey wrong for cluster | Verify `USDC_MINT_DEVNET` in `lib/constants.ts` matches the deployed test mint (`4YhohVQ8RmudchbAe2UBXcrdduVYkuqyU7hHviz2MSvT`) |
 | `mint_test_usdc` reverts with `Custom(4)` (OwnerMismatch) | Connected wallet isn't the mint authority | Reconnect with the wallet you passed to `spl-token create-token --mint-authority` |
 | `init_window` fails with `Pool not initialized` | UI cached pool=null | Hard-refresh browser; `usePool()` resubscribes on mount |
 | Frontend HTTP 500 with `Can't resolve '@solana-program/memo'` | Privy peer dep missing | `npm i @solana-program/memo --legacy-peer-deps` |

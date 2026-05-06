@@ -29,7 +29,7 @@ export const TIDE_PROGRAM_ID = safePubkey(
 // fresh test USDC into any wallet via the SPL MintTo instruction.
 // Decimals: 6 (matches real USDC).
 export const USDC_MINT_DEVNET = new PublicKey(
-  "2SN7pKbrbsiNBUJ28d6yU2X8miVF36ETFwqwy3Mt3UEe",
+  "4YhohVQ8RmudchbAe2UBXcrdduVYkuqyU7hHviz2MSvT",
 );
 export const USDC_MINT_MAINNET = new PublicKey(
   "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",

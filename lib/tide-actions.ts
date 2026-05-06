@@ -32,6 +32,7 @@ import {
   ASSOCIATED_TOKEN_PROGRAM_ID,
   TOKEN_PROGRAM_ID,
   createAssociatedTokenAccountIdempotentInstruction,
+  createMintToInstruction,
   getAssociatedTokenAddressSync,
 } from "@solana/spl-token";
 
@@ -660,6 +661,72 @@ export async function submitExecuteSwap(
     const signature = await wallet.sendTransaction(tx, connection);
     await connection.confirmTransaction(signature, "confirmed");
     return { ok: true, signature, poolPda: params.poolPda, positionPda: params.windowPda };
+  } catch (err) {
+    return { ok: false, error: decodeAnchorError(err) };
+  }
+}
+
+// ─── Admin/dev: mint test USDC ────────────────────────────────────────────────
+//
+// Devnet only. Our test USDC mint's authority is the wallet that ran
+// `spl-token create-token --mint-authority <pubkey>`, so the connected wallet
+// signs MintTo directly — no Tide program CPI involved. Saves users from
+// hunting for a working Circle faucet during demos.
+//
+// Mint authority is the admin wallet that ran the deploy script. Calling this
+// from a non-authority wallet will revert with Custom(4) (OwnerMismatch).
+
+export type MintTestUsdcParams = {
+  /** Wallet that receives the freshly minted test USDC. Defaults to caller. */
+  recipient?: PublicKey;
+  /** Human-readable USDC amount (e.g. 1000 → 1,000 USDC). */
+  amountUsdc: number;
+};
+
+export async function submitMintTestUsdc(
+  connection: Connection,
+  wallet: SignerWallet,
+  params: MintTestUsdcParams,
+): Promise<SubmitResult> {
+  if (!wallet.publicKey) return { ok: false, error: "Wallet not connected" };
+  if (!wallet.sendTransaction) return { ok: false, error: "Wallet does not support sendTransaction" };
+  if (CURRENT_NETWORK === "mainnet") {
+    return { ok: false, error: "Mint test USDC is devnet-only — refusing on mainnet." };
+  }
+
+  const authority = wallet.publicKey;
+  const recipient = params.recipient ?? authority;
+  const recipientAta = getAssociatedTokenAddressSync(USDC_MINT, recipient);
+  const amountLamports = BigInt(Math.round(params.amountUsdc * 1_000_000));
+
+  const createAtaIx = createAssociatedTokenAccountIdempotentInstruction(
+    authority,        // payer
+    recipientAta,
+    recipient,        // ATA owner
+    USDC_MINT,
+  );
+
+  const mintIx = createMintToInstruction(
+    USDC_MINT,
+    recipientAta,
+    authority,        // mint authority — must match what spl-token created
+    amountLamports,
+  );
+
+  const tx = new Transaction()
+    .add(ComputeBudgetProgram.setComputeUnitLimit({ units: 100_000 }))
+    .add(createAtaIx)
+    .add(mintIx);
+
+  try {
+    const signature = await preflightAndSend(
+      connection,
+      wallet,
+      tx,
+      authority,
+    );
+    await connection.confirmTransaction(signature, "confirmed");
+    return { ok: true, signature, poolPda: USDC_MINT, positionPda: recipientAta };
   } catch (err) {
     return { ok: false, error: decodeAnchorError(err) };
   }

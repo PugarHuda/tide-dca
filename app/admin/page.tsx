@@ -18,10 +18,12 @@ import {
   submitExecuteSwap,
   submitInitPool,
   submitInitWindow,
+  submitMintTestUsdc,
   submitTriggerAggregate,
 } from "@/lib/tide-actions";
 import { useToast } from "@/components/toast";
 import { formatUsdc, shortAddress } from "@/lib/utils";
+import { CURRENT_NETWORK } from "@/lib/constants";
 
 export default function AdminPage() {
   const { connection } = useConnection();
@@ -31,11 +33,12 @@ export default function AdminPage() {
   const { window: currentWindow, windowPubkey } = useCurrentWindow();
 
   const [busyAction, setBusyAction] = useState<
-    "init_pool" | "init_window" | "trigger" | "swap" | null
+    "init_pool" | "init_window" | "mint_usdc" | "trigger" | "swap" | null
   >(null);
+  const [mintAmount, setMintAmount] = useState("1000");
 
   const runAction = async (
-    name: "init_pool" | "init_window" | "trigger" | "swap",
+    name: "init_pool" | "init_window" | "mint_usdc" | "trigger" | "swap",
     label: string,
     runner: () => Promise<{ ok: boolean; signature?: string; error?: string }>,
   ) => {
@@ -64,6 +67,17 @@ export default function AdminPage() {
     }
     return runAction("init_window", "Window opened", () =>
       submitInitWindow(connection, wallet, poolPubkey, pool.windowCounter),
+    );
+  };
+
+  const handleMintTestUsdc = () => {
+    const amount = parseFloat(mintAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      toast.error("Enter a positive USDC amount.");
+      return;
+    }
+    return runAction("mint_usdc", `Minted ${amount} test USDC`, () =>
+      submitMintTestUsdc(connection, wallet, { amountUsdc: amount }),
     );
   };
 
@@ -271,6 +285,86 @@ export default function AdminPage() {
         submitting={busyAction === "init_window"}
         onClick={handleInitWindow}
       />
+
+      {CURRENT_NETWORK !== "mainnet" && (
+        <section className="card" style={{ marginBottom: 16 }}>
+          <div className="card__head" style={{ marginBottom: 8 }}>
+            <h2
+              className="mono"
+              style={{
+                margin: 0,
+                fontSize: 15,
+                fontWeight: 500,
+                color: "var(--text-0)",
+              }}
+            >
+              mint_test_usdc
+            </h2>
+            <span className="badge badge--accent">devnet faucet</span>
+            {busyAction === "mint_usdc" && (
+              <span className="badge badge--accent">
+                <span className="dot dot--live" /> submitting
+              </span>
+            )}
+          </div>
+          <p
+            className="muted"
+            style={{ fontSize: 13.5, lineHeight: 1.55, margin: 0 }}
+          >
+            Mints fresh test USDC to your connected wallet. Skips Circle&apos;s
+            faucet (region-blocked for many users). Requires the connected
+            wallet to be the test mint authority.
+          </p>
+
+          <div
+            className="flex"
+            style={{
+              alignItems: "center",
+              gap: 14,
+              marginTop: 16,
+              flexWrap: "wrap",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <input
+                type="number"
+                min={1}
+                step={1}
+                value={mintAmount}
+                onChange={(e) => setMintAmount(e.target.value)}
+                disabled={busyAction === "mint_usdc"}
+                style={{
+                  width: 110,
+                  background: "var(--surface-1)",
+                  border: "1px solid var(--border-1)",
+                  borderRadius: 6,
+                  padding: "8px 10px",
+                  color: "var(--text-0)",
+                  fontFamily: "var(--font-mono, monospace)",
+                  fontSize: 14,
+                }}
+              />
+              <span className="tiny mute2">USDC</span>
+            </div>
+            <button
+              onClick={() => void handleMintTestUsdc()}
+              disabled={!wallet.publicKey || busyAction === "mint_usdc"}
+              className="btn btn--primary"
+              title={!wallet.publicKey ? "Connect wallet" : undefined}
+            >
+              {busyAction === "mint_usdc" && (
+                <span className="spinner spinner--sm" />
+              )}
+              {busyAction === "mint_usdc"
+                ? "Minting…"
+                : "Mint test USDC to my wallet"}
+            </button>
+            {!wallet.publicKey && (
+              <span className="tiny mute2">— Connect wallet</span>
+            )}
+          </div>
+        </section>
+      )}
 
       <ActionCard
         title="trigger_aggregate"

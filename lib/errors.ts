@@ -175,7 +175,7 @@ export function decodeAnchorError(err: unknown): string {
   // tx fees). Surface a concrete checklist instead of the wallet's
   // unhelpful string.
   if (raw === "Unexpected error" || raw === "WalletSendTransactionError") {
-    return "Wallet refused the transaction. Check: (1) Phantom is on Devnet (Settings → Developer Settings → Change Network → Devnet), (2) Your wallet has SOL for tx fees (faucet.solana.com), (3) Your wallet has USDC (faucet.circle.com → Solana → Devnet).";
+    return "Wallet refused the transaction. Check: (1) Phantom is on Devnet (Settings → Developer Settings → Change Network → Devnet), (2) Your wallet has SOL for tx fees (faucet.solana.com), (3) Your wallet has test USDC (use /admin → Mint test USDC).";
   }
 
   if (raw && raw !== "Unexpected error") return raw;

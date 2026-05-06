@@ -23,9 +23,13 @@ export const TIDE_PROGRAM_ID = safePubkey(
   process.env.NEXT_PUBLIC_TIDE_PROGRAM_ID,
 );
 
-// USDC mints
+// USDC mints.
+// Devnet: custom test mint we control (Circle's faucet is region-blocked
+// for some users). Mint authority = pool admin wallet, so /admin can mint
+// fresh test USDC into any wallet via the SPL MintTo instruction.
+// Decimals: 6 (matches real USDC).
 export const USDC_MINT_DEVNET = new PublicKey(
-  "Gh9ZwEmdLJ8DscKNTkTqPbNwLNNBjuSzaG9Vp2KGtKJr",
+  "2SN7pKbrbsiNBUJ28d6yU2X8miVF36ETFwqwy3Mt3UEe",
 );
 export const USDC_MINT_MAINNET = new PublicKey(
   "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",

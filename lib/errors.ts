@@ -136,6 +136,23 @@ export function decodeAnchorError(err: unknown): string {
       const entry = TIDE_ERRORS[Number(numMatch[1])];
       if (entry) return entry.message;
     }
+    // simulateTransaction returns { InstructionError: [ixIndex, { Custom: N }] }
+    // We stringify it, so search for "Custom":N inside the message.
+    const customMatch = m.match(/"Custom"\s*:\s*(\d+)/);
+    if (customMatch) {
+      const code = Number(customMatch[1]);
+      if (code >= 6000) {
+        const entry = TIDE_ERRORS[code];
+        if (entry) return entry.message;
+      }
+      // Custom(0) = SystemProgram::AccountAlreadyInUse — Anchor's `init`
+      // tried to create_account on a PDA that's already there. The most
+      // common cause for Tide is "you already have a position / window /
+      // pool depending on which ix this is".
+      if (code === 0) {
+        return "This account already exists on chain. If you've already set up a DCA position, go to the Dashboard to commit instead. If you're an admin, the pool/window may already be initialized.";
+      }
+    }
     if (/User rejected|user denied|reject(ed)? the request/i.test(m)) {
       return "Transaction cancelled in wallet.";
     }
@@ -147,9 +164,6 @@ export function decodeAnchorError(err: unknown): string {
     }
     if (/blockhash not found|BlockhashNotFound/i.test(m)) {
       return "Network busy — blockhash expired. Try again.";
-    }
-    if (/Simulation failed/i.test(m)) {
-      return "Transaction simulation failed. Check your wallet balance + the on-chain state, then retry.";
     }
   }
 

@@ -5,21 +5,35 @@ import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 
 import { submitSetupDcaPosition } from "@/lib/tide-actions";
 import { useToast } from "@/components/toast";
+import { usePool } from "@/lib/hooks";
 
 /**
  * DCA setup form. Submits setup_dca_position via lib/tide-actions.ts;
  * surfaces success / error through the global toast system instead of
  * inline text so users notice tx confirmations even if they've scrolled.
+ *
+ * Window duration is a pool-level config (set at init_pool by admin),
+ * not per-position — we display it read-only from `usePool` so users
+ * don't think they're picking it themselves.
  */
 export function DcaSetupForm() {
   const { connection } = useConnection();
   const wallet = useWallet();
   const toast = useToast();
+  const { pool } = usePool();
 
   const [amountUsdc, setAmountUsdc] = useState("50");
-  const [windowMinutes, setWindowMinutes] = useState("60");
   const [maxSlippagePct, setMaxSlippagePct] = useState("1");
   const [submitting, setSubmitting] = useState(false);
+
+  const windowSeconds = pool ? Number(pool.windowDurationSeconds) : 3600;
+  const windowMinutes = Math.round(windowSeconds / 60);
+  const windowLabel =
+    windowMinutes >= 1440
+      ? `${Math.round(windowMinutes / 1440)} day`
+      : windowMinutes >= 60
+        ? `${(windowMinutes / 60).toFixed(windowMinutes % 60 === 0 ? 0 : 1)} h`
+        : `${windowMinutes} min`;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -47,8 +61,7 @@ export function DcaSetupForm() {
         ? 0.2
         : 0.1;
   const poolSlippageEstimate = 0.05;
-  const annualBuys =
-    (60 * 24 * 365) / parseInt(windowMinutes || "60", 10);
+  const annualBuys = (60 * 24 * 365) / windowMinutes;
   const annualSavings =
     (parseFloat(amountUsdc || "0") *
       (standaloneSlippageEstimate - poolSlippageEstimate) *
@@ -140,19 +153,39 @@ export function DcaSetupForm() {
 
         <div className="field">
           <label className="field__label">Window duration</label>
-          <select
-            className="input"
-            value={windowMinutes}
-            onChange={(e) => setWindowMinutes(e.target.value)}
+          <div
+            className="card card--quiet"
+            style={{
+              padding: 14,
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              minHeight: 46,
+            }}
           >
-            <option value="15">15 minutes</option>
-            <option value="60">1 hour</option>
-            <option value="360">6 hours</option>
-            <option value="1440">Daily</option>
-          </select>
+            <span
+              style={{
+                width: 28,
+                height: 28,
+                borderRadius: 6,
+                background: "var(--accent-glow)",
+                color: "var(--accent)",
+                display: "grid",
+                placeItems: "center",
+                fontSize: 14,
+              }}
+            >
+              ⏱
+            </span>
+            <div style={{ flex: 1 }}>
+              <div className="mono" style={{ fontWeight: 500 }}>
+                {pool ? windowLabel : "—"}
+              </div>
+              <div className="tiny mute2">Pool-level setting</div>
+            </div>
+          </div>
           <span className="field__hint">
-            How often a window settles. Shorter = quicker fills, longer = larger
-            pool.
+            Set once by the pool admin; same for every participant.
           </span>
         </div>
       </div>

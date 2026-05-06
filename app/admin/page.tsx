@@ -36,6 +36,7 @@ export default function AdminPage() {
     "init_pool" | "init_window" | "mint_usdc" | "trigger" | "swap" | null
   >(null);
   const [mintAmount, setMintAmount] = useState("1000");
+  const [poolWindowMinutes, setPoolWindowMinutes] = useState("15");
 
   const runAction = async (
     name: "init_pool" | "init_window" | "mint_usdc" | "trigger" | "swap",
@@ -55,10 +56,18 @@ export default function AdminPage() {
     }
   };
 
-  const handleInitPool = () =>
-    runAction("init_pool", "Pool initialized", () =>
-      submitInitPool(connection, wallet, {}),
+  const handleInitPool = () => {
+    const minutes = parseInt(poolWindowMinutes, 10);
+    if (!Number.isFinite(minutes) || minutes < 1 || minutes > 1440) {
+      toast.error("Window minutes must be between 1 and 1440.");
+      return;
+    }
+    return runAction("init_pool", "Pool initialized", () =>
+      submitInitPool(connection, wallet, {
+        windowDurationSeconds: minutes * 60,
+      }),
     );
+  };
 
   const handleInitWindow = () => {
     if (!pool) {
@@ -227,6 +236,10 @@ export default function AdminPage() {
               value={pool.windowCounter.toString()}
             />
             <Row
+              label="Window duration"
+              value={`${(Number(pool.windowDurationSeconds) / 60).toString()} min`}
+            />
+            <Row
               label="Min pool size"
               value={formatUsdc(pool.minPoolSizeUsdc)}
             />
@@ -250,21 +263,91 @@ export default function AdminPage() {
         )}
       </section>
 
-      <ActionCard
-        title="init_pool"
-        description="Creates the canonical USDC → SOL pool with default config (1h windows, 100 USDC min, 5 bps fee)."
-        buttonLabel="Initialize Pool"
-        disabled={!!pool || !wallet.publicKey}
-        disabledReason={
-          !wallet.publicKey
-            ? "Connect wallet"
-            : pool
-              ? "Pool already exists"
-              : undefined
-        }
-        submitting={busyAction === "init_pool"}
-        onClick={handleInitPool}
-      />
+      <section className="card" style={{ marginBottom: 16 }}>
+        <div className="card__head" style={{ marginBottom: 8 }}>
+          <h2
+            className="mono"
+            style={{
+              margin: 0,
+              fontSize: 15,
+              fontWeight: 500,
+              color: "var(--text-0)",
+            }}
+          >
+            init_pool
+          </h2>
+          {busyAction === "init_pool" && (
+            <span className="badge badge--accent">
+              <span className="dot dot--live" /> submitting
+            </span>
+          )}
+        </div>
+        <p
+          className="muted"
+          style={{ fontSize: 13.5, lineHeight: 1.55, margin: 0 }}
+        >
+          Creates the canonical USDC → SOL pool. Window duration is fixed for
+          the pool&apos;s lifetime (program seeds are mint-pair only — no
+          re-init), so pick carefully. 100 USDC aggregate minimum, 5 bps fee.
+        </p>
+
+        <div
+          className="flex"
+          style={{
+            alignItems: "center",
+            gap: 14,
+            marginTop: 16,
+            flexWrap: "wrap",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <select
+              value={poolWindowMinutes}
+              onChange={(e) => setPoolWindowMinutes(e.target.value)}
+              disabled={!!pool || busyAction === "init_pool"}
+              style={{
+                background: "var(--surface-1)",
+                border: "1px solid var(--border-1)",
+                borderRadius: 6,
+                padding: "8px 10px",
+                color: "var(--text-0)",
+                fontFamily: "var(--font-mono, monospace)",
+                fontSize: 14,
+              }}
+            >
+              <option value="5">5 min (fast demo)</option>
+              <option value="15">15 min</option>
+              <option value="30">30 min</option>
+              <option value="60">1 hour</option>
+              <option value="360">6 hours</option>
+              <option value="1440">Daily (24 h)</option>
+            </select>
+            <span className="tiny mute2">window</span>
+          </div>
+          <button
+            onClick={() => void handleInitPool()}
+            disabled={!!pool || !wallet.publicKey || busyAction === "init_pool"}
+            className="btn btn--primary"
+            title={
+              !wallet.publicKey
+                ? "Connect wallet"
+                : pool
+                  ? "Pool already exists"
+                  : undefined
+            }
+          >
+            {busyAction === "init_pool" && (
+              <span className="spinner spinner--sm" />
+            )}
+            {busyAction === "init_pool" ? "Submitting…" : "Initialize Pool"}
+          </button>
+          {(!wallet.publicKey || pool) && (
+            <span className="tiny mute2">
+              — {!wallet.publicKey ? "Connect wallet" : "Pool already exists"}
+            </span>
+          )}
+        </div>
+      </section>
 
       <ActionCard
         title="init_window"

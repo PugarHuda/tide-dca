@@ -72,6 +72,39 @@ export interface SignerWallet {
   ) => Promise<string>;
 }
 
+/**
+ * Pre-simulate a tx, then hand off to wallet.sendTransaction. Without the
+ * pre-flight, Phantom often surfaces a bare "Unexpected error" string with
+ * no logs attached when the program reverts — leaving the user stuck.
+ *
+ * simulateTransaction returns the program logs even when the tx would
+ * revert, so we can build a proper AnchorError for decodeAnchorError().
+ */
+async function preflightAndSend(
+  connection: Connection,
+  wallet: SignerWallet,
+  tx: Transaction,
+  feePayer: PublicKey,
+): Promise<string> {
+  const { blockhash } = await connection.getLatestBlockhash("confirmed");
+  tx.recentBlockhash = blockhash;
+  tx.feePayer = feePayer;
+
+  const sim = await connection.simulateTransaction(tx, undefined);
+  if (sim.value.err) {
+    const message =
+      typeof sim.value.err === "string"
+        ? sim.value.err
+        : JSON.stringify(sim.value.err);
+    const wrapped = new Error(`Simulation failed: ${message}`);
+    // Attach logs so decodeAnchorError can read them.
+    (wrapped as Error & { logs?: string[] }).logs = sim.value.logs ?? [];
+    throw wrapped;
+  }
+
+  return wallet.sendTransaction!(tx, connection);
+}
+
 export type SetupDcaParams = {
   amountPerWindowUsdc: number; // human-readable USDC (will convert to 6-decimal lamports)
   maxSlippageBps: number;
@@ -130,7 +163,12 @@ export async function submitSetupDcaPosition(
     .add(ix);
 
   try {
-    const signature = await wallet.sendTransaction(tx, connection);
+    const signature = await preflightAndSend(
+      connection,
+      wallet,
+      tx,
+      wallet.publicKey,
+    );
     await connection.confirmTransaction(signature, "confirmed");
     return { ok: true, signature, poolPda, positionPda };
   } catch (err) {
@@ -218,7 +256,12 @@ export async function submitCommitIntent(
     .add(ix);
 
   try {
-    const signature = await wallet.sendTransaction(tx, connection);
+    const signature = await preflightAndSend(
+      connection,
+      wallet,
+      tx,
+      wallet.publicKey,
+    );
     await connection.confirmTransaction(signature, "confirmed");
     return { ok: true, signature, poolPda: params.poolPda, positionPda: intentPda };
   } catch (err) {
@@ -285,7 +328,12 @@ export async function submitInitPool(
     .add(ix);
 
   try {
-    const signature = await wallet.sendTransaction(tx, connection);
+    const signature = await preflightAndSend(
+      connection,
+      wallet,
+      tx,
+      wallet.publicKey,
+    );
     await connection.confirmTransaction(signature, "confirmed");
     return { ok: true, signature, poolPda, positionPda: poolPda };
   } catch (err) {
@@ -328,7 +376,12 @@ export async function submitInitWindow(
     .add(ix);
 
   try {
-    const signature = await wallet.sendTransaction(tx, connection);
+    const signature = await preflightAndSend(
+      connection,
+      wallet,
+      tx,
+      wallet.publicKey,
+    );
     await connection.confirmTransaction(signature, "confirmed");
     return { ok: true, signature, poolPda, positionPda: windowPda };
   } catch (err) {
@@ -402,7 +455,12 @@ export async function submitClaimAllocation(
     .add(claimIx);
 
   try {
-    const signature = await wallet.sendTransaction(tx, connection);
+    const signature = await preflightAndSend(
+      connection,
+      wallet,
+      tx,
+      wallet.publicKey,
+    );
     await connection.confirmTransaction(signature, "confirmed");
     return { ok: true, signature, poolPda: params.poolPda, positionPda };
   } catch (err) {
@@ -440,7 +498,12 @@ export async function submitTriggerAggregate(
     .add(ix);
 
   try {
-    const signature = await wallet.sendTransaction(tx, connection);
+    const signature = await preflightAndSend(
+      connection,
+      wallet,
+      tx,
+      wallet.publicKey,
+    );
     await connection.confirmTransaction(signature, "confirmed");
     return { ok: true, signature, poolPda, positionPda: windowPda };
   } catch (err) {
@@ -591,6 +654,9 @@ export async function submitExecuteSwap(
   const tx = new VersionedTransaction(message);
 
   try {
+    // execute_swap uses VersionedTransaction (Jupiter ALT-aware), so we
+    // skip the Transaction-shaped preflightAndSend helper. Phantom's own
+    // simulation handles v0 tx adequately for this path.
     const signature = await wallet.sendTransaction(tx, connection);
     await connection.confirmTransaction(signature, "confirmed");
     return { ok: true, signature, poolPda: params.poolPda, positionPda: params.windowPda };

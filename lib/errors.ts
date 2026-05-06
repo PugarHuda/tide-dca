@@ -155,6 +155,15 @@ export function decodeAnchorError(err: unknown): string {
 
   // Last resort: the raw surface message if we have one, otherwise generic.
   const raw = err instanceof Error ? err.message : String(err);
+
+  // Phantom-specific: "Unexpected error" with no logs/cause means Phantom
+  // refused to broadcast (most often: wallet not on devnet, or 0 SOL for
+  // tx fees). Surface a concrete checklist instead of the wallet's
+  // unhelpful string.
+  if (raw === "Unexpected error" || raw === "WalletSendTransactionError") {
+    return "Wallet refused the transaction. Check: (1) Phantom is on Devnet (Settings → Developer Settings → Change Network → Devnet), (2) Your wallet has SOL for tx fees (faucet.solana.com), (3) Your wallet has USDC (faucet.circle.com → Solana → Devnet).";
+  }
+
   if (raw && raw !== "Unexpected error") return raw;
   return "Transaction failed. Open the browser console to see the full error.";
 }

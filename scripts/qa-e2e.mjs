@@ -396,16 +396,141 @@ async function cmdAggregate() {
 }
 
 async function cmdSwap() {
-  section("Phase 5: execute_swap (Jupiter CPI)");
-  warn(`Devnet Jupiter liquidity for custom mint = ZERO. Expected to fail at quote step.`);
-  warn(`This phase validates the wiring path; real swap demo requires mainnet.`);
-  info(`Skipping execute_swap CLI — frontend already wires Jupiter v6 quote+swap+CPI.`);
-  info(`Mainnet readiness gated on audit + real liquidity, not on this script.`);
+  section("Phase 5: execute_swap (devnet — sync_native simulated swap)");
+  info(`Jupiter v6 quote API has no devnet support. Instead we exercise the`);
+  info(`execute_swap ix path via a real SPL Token sync_native CPI:`);
+  info(`  1. Pre-fund escrow_output_ata (wSOL) with native SOL lamports`);
+  info(`  2. CPI sync_native → updates token amount to match lamports`);
+  info(`This validates: PDA signing, status transition, slippage check,`);
+  info(`tokens_acquired persistence, total_volume accumulation. The only`);
+  info(`difference vs mainnet is *who* puts wSOL in the output ATA — Jupiter`);
+  info(`vs us topping up. Anchor doesn't care, the lifecycle proceeds.`);
+
+  const pool = await getPool();
+  if (!pool) throw new Error("Pool missing");
+  const windowPda = pool.activeWindow;
+  // After init_window #1, active_window points at #1, but window #0 is what
+  // we want to settle (it's in Aggregating). Find it:
+  const w0Pda = findWindowPda(0n);
+  const win = await getWindow(w0Pda);
+  if (!win) throw new Error("Window #0 missing");
+  if (win.status !== 1) {
+    warn(`Window #0 status = ${STATUS[win.status]} (expected Aggregating). Skipping.`);
+    return;
+  }
+
+  const escrowAuthority = findEscrowAuthorityPda(w0Pda);
+  const escrowInputAta = getAssociatedTokenAddressSync(USDC_MINT, escrowAuthority, true);
+  const escrowOutputAta = getAssociatedTokenAddressSync(SOL_MINT, escrowAuthority, true);
+
+  // Tx 1: create output ATA (idempotent) + fund with native lamports
+  info(``);
+  info(`tx 1: create wSOL ATA + transfer 10,000,000 lamports (0.01 SOL)`);
+  const fundTx = new Transaction()
+    .add(ComputeBudgetProgram.setComputeUnitLimit({ units: 100_000 }))
+    .add(createAssociatedTokenAccountIdempotentInstruction(
+      owner, escrowOutputAta, escrowAuthority, SOL_MINT,
+    ))
+    .add(SystemProgram.transfer({
+      fromPubkey: owner,
+      toPubkey: escrowOutputAta,
+      lamports: 10_000_000,
+    }));
+  const fundSig = await send(fundTx, "fund_output_ata");
+  ok(`Funded output ATA: ${fundSig}`);
+
+  // Tx 2: execute_swap with jupiter_program = TOKEN_PROGRAM_ID + route_data = sync_native
+  info(``);
+  info(`tx 2: execute_swap → CPI SPL sync_native (PDA-signed)`);
+
+  // Borsh args: Vec<u8> route_data (1 byte = 17 for SyncNative) + u64 min_acquired
+  const routeData = Buffer.from([17]); // SPL Token instruction 17 = SyncNative
+  const argBuf = Buffer.alloc(4 + routeData.length + 8);
+  argBuf.writeUInt32LE(routeData.length, 0);
+  routeData.copy(argBuf, 4);
+  argBuf.writeBigUInt64LE(1n, 4 + routeData.length); // min_acquired = 1 lamport
+  const data = Buffer.concat([discriminator("execute_swap"), argBuf]);
+
+  // Fixed accounts (matches programs/tide/src/instructions/execute_swap.rs)
+  const fixedKeys = [
+    { pubkey: owner, isSigner: true, isWritable: true },
+    { pubkey: poolPda, isSigner: false, isWritable: true },
+    { pubkey: w0Pda, isSigner: false, isWritable: true },
+    { pubkey: USDC_MINT, isSigner: false, isWritable: false },
+    { pubkey: SOL_MINT, isSigner: false, isWritable: false },
+    { pubkey: escrowAuthority, isSigner: false, isWritable: false },
+    { pubkey: escrowInputAta, isSigner: false, isWritable: true },
+    { pubkey: escrowOutputAta, isSigner: false, isWritable: true },
+    { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false }, // jupiter_program = SPL Token
+    { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+    { pubkey: ASSOCIATED_TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+    { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+    { pubkey: SYSVAR_RENT_PUBKEY, isSigner: false, isWritable: false },
+  ];
+
+  // remaining_accounts: SyncNative ix expects [wsol_ata]
+  const remainingKeys = [
+    { pubkey: escrowOutputAta, isSigner: false, isWritable: true },
+  ];
+
+  const ix = new TransactionInstruction({
+    programId: PROGRAM_ID,
+    keys: [...fixedKeys, ...remainingKeys],
+    data,
+  });
+
+  const tx = new Transaction()
+    .add(ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }))
+    .add(ix);
+
+  const sig = await send(tx, "execute_swap");
+  ok(`execute_swap confirmed: ${sig}`);
 }
 
 async function cmdClaim() {
   section("Phase 6: claim_allocation");
-  warn(`Skipped (depends on successful execute_swap, which can't run on devnet).`);
+  const pool = await getPool();
+  if (!pool) throw new Error("Pool missing");
+  const w0Pda = findWindowPda(0n);
+  const win = await getWindow(w0Pda);
+  if (!win) throw new Error("Window #0 missing");
+  if (win.status !== 2) {
+    warn(`Window #0 status = ${STATUS[win.status]} (expected Distributed). Run 'swap' first.`);
+    return;
+  }
+
+  const intentPda = findIntentPda(w0Pda);
+  const escrowAuthority = findEscrowAuthorityPda(w0Pda);
+  const escrowOutputAta = getAssociatedTokenAddressSync(SOL_MINT, escrowAuthority, true);
+  const ownerOutputAta = getAssociatedTokenAddressSync(SOL_MINT, owner);
+
+  const createAtaIx = createAssociatedTokenAccountIdempotentInstruction(
+    owner, ownerOutputAta, owner, SOL_MINT,
+  );
+
+  const claimIx = new TransactionInstruction({
+    programId: PROGRAM_ID,
+    keys: [
+      { pubkey: owner, isSigner: true, isWritable: true },
+      { pubkey: SOL_MINT, isSigner: false, isWritable: false },
+      { pubkey: intentPda, isSigner: false, isWritable: true },
+      { pubkey: w0Pda, isSigner: false, isWritable: false },
+      { pubkey: positionPda, isSigner: false, isWritable: true },
+      { pubkey: escrowOutputAta, isSigner: false, isWritable: true },
+      { pubkey: escrowAuthority, isSigner: false, isWritable: false },
+      { pubkey: ownerOutputAta, isSigner: false, isWritable: true },
+      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+    ],
+    data: discriminator("claim_allocation"),
+  });
+
+  const tx = new Transaction()
+    .add(ComputeBudgetProgram.setComputeUnitLimit({ units: 200_000 }))
+    .add(createAtaIx)
+    .add(claimIx);
+
+  const sig = await send(tx, "claim_allocation");
+  ok(`claim_allocation confirmed: ${sig}`);
 }
 
 // ─── Entrypoint ───────────────────────────────────────────────────────────

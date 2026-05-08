@@ -99,9 +99,6 @@ export default function LandingPage() {
         <Comparison />
       </Reveal>
       <Reveal>
-        <Proof />
-      </Reveal>
-      <Reveal>
         <FinalCta />
       </Reveal>
       <Footer />
@@ -137,69 +134,52 @@ function Hero({
   isLive: boolean;
 }) {
   return (
-    <section className="hero">
-      <CurrentLines count={9} opacity={0.08} />
-      <div className="hero__eyes-wrap">
+    <section className="hero hero--minimal">
+      {/* Predator eyes — atmospheric background, behind text */}
+      <div className="hero__eyes-bg" aria-hidden>
         <PredatorEyes />
       </div>
-      <div className="hero__inner">
-        <div className="hero__copy">
-          <EyebrowTicker
-            isLive={isLive}
-            participantCount={participantCount}
-            windowNumber={windowNumber}
-          />
-          <h1 className="hero__h">
-            DCA without MEV.
-            <br />
-            <span className="hero__h-accent">Bots blind, retail wins.</span>
-          </h1>
-          <p className="hero__p">
-            Tide aggregates encrypted DCA orders inside Arcium MPC, then settles
-            the whole pool as one Jupiter swap. No mempool footprint. No
-            sandwich. Slippage drops from{" "}
-            <span className="mono" style={{ color: "var(--warn)" }}>
-              ~0.50%
-            </span>{" "}
-            to{" "}
-            <span className="mono" style={{ color: "var(--accent)" }}>
-              ~0.05%
-            </span>
-            .
-          </p>
-          <div className="hero__cta">
-            <Link href="/setup" className="btn btn--primary btn--lg">
-              Start DCA <ArrowRight />
-            </Link>
-            <a
-              className="btn btn--ghost btn--lg"
-              href="#how"
-              onClick={(e) => {
-                e.preventDefault();
-                document
-                  .getElementById("how")
-                  ?.scrollIntoView({ behavior: "smooth", block: "start" });
-              }}
-            >
-              How it works
-            </a>
-          </div>
-          <div className="hero__trust">
-            <TrustItem label="MPC layer" v="Arcium (planned)" />
-            <TrustItem label="Routing" v="Jupiter v6" />
-            <TrustItem label="Wallet" v="Phantom · Privy" />
-            <TrustItem label="Network" v={`Solana ${CURRENT_NETWORK}`} />
-          </div>
-        </div>
-
-        <HeroPanel
-          openRemainingS={openRemainingS}
-          fillPct={fillPct}
-          participantCount={participantCount}
-          poolSizeLamports={poolSizeLamports}
-          windowNumber={windowNumber}
+      <div className="hero__inner hero__inner--center">
+        <EyebrowTicker
           isLive={isLive}
+          participantCount={participantCount}
+          windowNumber={windowNumber}
         />
+        <h1 className="hero__h">
+          DCA without MEV.
+          <br />
+          <span className="hero__h-accent">Bots blind, retail wins.</span>
+        </h1>
+        <p className="hero__p">
+          Tide aggregates encrypted DCA orders inside Arcium MPC, then
+          settles the whole pool as one swap. No mempool footprint, no
+          sandwich. Slippage drops from{" "}
+          <span className="mono" style={{ color: "var(--warn)" }}>
+            ~0.50%
+          </span>{" "}
+          to{" "}
+          <span className="mono" style={{ color: "var(--accent)" }}>
+            ~0.05%
+          </span>
+          .
+        </p>
+        <div className="hero__cta">
+          <Link href="/setup" className="btn btn--primary btn--lg">
+            Start DCA <ArrowRight />
+          </Link>
+          <a
+            className="btn btn--ghost btn--lg"
+            href="#how"
+            onClick={(e) => {
+              e.preventDefault();
+              document
+                .getElementById("how")
+                ?.scrollIntoView({ behavior: "smooth", block: "start" });
+            }}
+          >
+            How it works
+          </a>
+        </div>
       </div>
     </section>
   );
@@ -529,8 +509,6 @@ function HowItWorks() {
           </div>
         ))}
       </div>
-
-      <FlowDiagram />
     </section>
   );
 }
@@ -834,7 +812,6 @@ function Proof() {
 function FinalCta() {
   return (
     <section className="finalcta">
-      <CurrentLines count={6} opacity={0.05} />
       <div className="finalcta__inner">
         <h2 className="finalcta__h">
           Stop feeding bots.

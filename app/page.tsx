@@ -139,9 +139,11 @@ function Hero({
   return (
     <section className="hero">
       <CurrentLines count={9} opacity={0.08} />
+      <div className="hero__eyes-wrap">
+        <PredatorEyes />
+      </div>
       <div className="hero__inner">
         <div className="hero__copy">
-          <PredatorEyes />
           <EyebrowTicker
             isLive={isLive}
             participantCount={participantCount}

@@ -1557,26 +1557,42 @@ textarea {
   gap: 4px;
 }
 
-/* Predator eyes — animated SVG block at the top of the hero copy. The
-   feTurbulence flame outline is GPU-heavy on large surfaces, so we cap
-   width and let aspect-ratio handle responsive scaling. */
+/* Predator eyes — large, centered SVG block above the hero grid. The
+   feTurbulence flame outlines are GPU-heavy, so we cap the width and
+   let aspect-ratio handle responsive scaling. The container centers
+   the block across the full hero, decoupling it from the left-aligned
+   .hero__copy column below. */
+.hero__eyes-wrap {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  position: relative;
+  z-index: 2;
+  padding: 28px 24px 8px;
+  pointer-events: none; /* don't intercept hero clicks */
+}
 .eyes {
   width: 100%;
-  max-width: 480px;
-  aspect-ratio: 520 / 140;
-  margin: 0 0 18px;
-  /* Subtle breathing pulse on the whole block — adds life without
-     overpowering the flicker. */
+  max-width: 720px;
+  aspect-ratio: 720 / 220;
+  /* Subtle breathing pulse — combines with the inner flame flicker
+     for a "living" feel without overdoing motion. */
   animation: eyes-breathe 5.6s ease-in-out infinite;
-  filter: drop-shadow(0 0 14px rgba(6, 182, 212, 0.25));
+  filter: drop-shadow(0 0 28px rgba(6, 182, 212, 0.45))
+          drop-shadow(0 0 48px rgba(6, 182, 212, 0.18));
 }
 @keyframes eyes-breathe {
-  0%, 100% { transform: scale(1); opacity: 0.95; }
+  0%, 100% { transform: scale(1); opacity: 0.96; }
   50%      { transform: scale(1.02); opacity: 1; }
 }
 @media (prefers-reduced-motion: reduce) {
   .eyes { animation: none; }
 }
+@media (max-width: 860px) {
+  .eyes { max-width: 540px; }
+  .hero__eyes-wrap { padding: 22px 18px 4px; }
+}
 @media (max-width: 600px) {
-  .eyes { max-width: 320px; margin-bottom: 14px; }
+  .eyes { max-width: 360px; }
+  .hero__eyes-wrap { padding: 18px 14px 2px; }
 }

@@ -22,6 +22,7 @@ import { useCurrentWindow, usePool } from "@/lib/hooks";
 import { CURRENT_NETWORK } from "@/lib/constants";
 import { formatUsdc } from "@/lib/utils";
 import { useInView } from "@/lib/hooks/use-in-view";
+import { PredatorEyes } from "@/components/predator-eyes";
 
 const WINDOW_DURATION_S = 3600;
 
@@ -140,6 +141,7 @@ function Hero({
       <CurrentLines count={9} opacity={0.08} />
       <div className="hero__inner">
         <div className="hero__copy">
+          <PredatorEyes />
           <EyebrowTicker
             isLive={isLive}
             participantCount={participantCount}

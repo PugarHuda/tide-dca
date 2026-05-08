@@ -8,6 +8,7 @@ import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { SavingsChart } from "@/components/savings-chart";
 import { WindowHistoryTable } from "@/components/window-history";
 import { WindowStatusCard } from "@/components/window-status-card";
+import { ReflectCard } from "@/components/reflect-card";
 import { useTideWallet } from "@/lib/hooks/use-tide-wallet";
 import {
   useCurrentWindow,
@@ -328,6 +329,15 @@ export default function DashboardPage() {
           </dl>
         </div>
       </section>
+
+      {currentWindow && pool && (
+        <section style={{ marginBottom: 28 }}>
+          <ReflectCard
+            totalCommittedLamports={currentWindow.totalCommittedUsdc}
+            windowSeconds={Number(pool.windowDurationSeconds)}
+          />
+        </section>
+      )}
 
       <section style={{ marginBottom: 28 }}>
         <SavingsChart />

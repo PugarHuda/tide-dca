@@ -6,6 +6,7 @@ import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { submitSetupDcaPosition } from "@/lib/tide-actions";
 import { useToast } from "@/components/toast";
 import { usePool } from "@/lib/hooks";
+import { MoonPayButton } from "@/components/moonpay-button";
 
 /**
  * DCA setup form. Submits setup_dca_position via lib/tide-actions.ts;
@@ -257,6 +258,24 @@ export function DcaSetupForm() {
             ${annualSavings.toFixed(2)}
           </span>
         </div>
+      </div>
+
+      <div
+        className="flex"
+        style={{
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: 12,
+          flexWrap: "wrap",
+        }}
+      >
+        <span className="tiny mute2">
+          Need USDC? Skip the bridge — fund with USD/EUR card.
+        </span>
+        <MoonPayButton
+          variant="ghost"
+          amount={parseFloat(amountUsdc) || undefined}
+        />
       </div>
 
       <button

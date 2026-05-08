@@ -484,7 +484,117 @@ export default function AdminPage() {
         submitting={busyAction === "swap"}
         onClick={handleExecuteSwap}
       />
+
+      <section
+        className="card"
+        style={{ marginTop: 32, padding: 22 }}
+      >
+        <header
+          className="flex"
+          style={{
+            alignItems: "center",
+            justifyContent: "space-between",
+            marginBottom: 14,
+          }}
+        >
+          <span className="eyebrow" style={{ margin: 0 }}>
+            Production migration
+          </span>
+          <span className="badge">post-MVP</span>
+        </header>
+        <p
+          className="muted"
+          style={{ fontSize: 13.5, lineHeight: 1.55, margin: "0 0 16px" }}
+        >
+          Single-wallet pool authority is hackathon-only. For mainnet, Tide
+          migrates to institutional infrastructure:
+        </p>
+        <ul
+          style={{
+            listStyle: "none",
+            padding: 0,
+            margin: 0,
+            display: "flex",
+            flexDirection: "column",
+            gap: 10,
+            fontSize: 13.5,
+          }}
+        >
+          <ProdRow
+            label="Pool authority"
+            target="Squads V4 multisig (Altitude)"
+            href="https://app.squads.so"
+          />
+          <ProdRow
+            label="Smart-contract audit"
+            target="Ottersec or Halborn (~2-4 weeks, $15-30K)"
+          />
+          <ProdRow
+            label="Confidential aggregate"
+            target="Arcium MXE (Cohort 2)"
+            href="https://arcium.com/build"
+          />
+          <ProdRow
+            label="DEX routing"
+            target="Jupiter v6 / Raydium aggregator (real liquidity)"
+          />
+          <ProdRow
+            label="Idle yield"
+            target="Reflect Protocol (USDC vault APY)"
+            href="https://reflect.app"
+          />
+          <ProdRow
+            label="Bug bounty"
+            target="Immunefi ($50-100K critical tier)"
+          />
+        </ul>
+      </section>
     </main>
+  );
+}
+
+function ProdRow({
+  label,
+  target,
+  href,
+}: {
+  label: string;
+  target: string;
+  href?: string;
+}) {
+  return (
+    <li
+      className="flex"
+      style={{
+        alignItems: "baseline",
+        justifyContent: "space-between",
+        gap: 12,
+        padding: "8px 0",
+        borderBottom: "1px solid var(--line)",
+      }}
+    >
+      <span className="muted" style={{ fontSize: 13 }}>
+        {label}
+      </span>
+      {href ? (
+        <a
+          href={href}
+          target="_blank"
+          rel="noreferrer"
+          className="mono"
+          style={{ color: "var(--accent)", fontSize: 13 }}
+        >
+          {target} ↗
+        </a>
+      ) : (
+        <span
+          className="mono"
+          style={{ color: "var(--text-1)", fontSize: 13 }}
+        >
+          {target}
+        </span>
+      )}
+    </li>
   );
 }
 

@@ -151,15 +151,16 @@
 
 # Filtering matrix (judges' eye view)
 
-| Sponsor | Claim level | Live evidence | Risk if checked |
+| Sponsor | Depth | Live evidence | Probe risk |
 |---|---|---|---|
-| Phantom | ✅ Claim | Frontend connect flow live, account dropdown, mobile drawer | Low — works |
-| Privy | ✅ Claim (gated) | Embedded wallet bridge wired, needs env var | Low — code is solid |
-| Arcium | ⏳ Prep + skeleton | `confidential-ixs/` skeleton + intent hash on-chain | Medium — frame honestly as Cohort 2 testnet target |
-| Raydium | ✅ Claim | `lib/raydium.ts` quote + swap-tx wiring; AMM v4 + CLMM program ids; CPI passthrough validated devnet `2yCSusUk...` | Low — quote API live, mainnet swap CPI ready |
-| MoonPay | ✅ Claim | URL builder + button on /setup, sandbox mode for demo, production gated by API key | Low — works in sandbox out of the box |
-| Reflect | ✅ Frontend claim | Live ReflectCard with real-data yield projections on /dashboard | Medium — on-chain CPI is post-MVP, framed honestly |
-| Altitude (Squads) | ⏳ Roadmap | Production migration card on /admin, link to app.squads.so | Low — architecturally compatible, day-one mainnet migration |
+| Phantom | **4/4 Deep** | Custom modal, account dropdown, mobile drawer, balance subscriptions, full wallet adapter | Low |
+| Jupiter | **4/4 Deep** | Real v6 API + ALT + PDA-signed CPI; on-chain validated tx `2yCSusUk...` | Low |
+| Privy | **3/4 Solid** | Embedded wallet bridge + cohabitation logic with wallet-adapter | Low if env set |
+| Raydium | **3/4 Solid** | `lib/raydium.ts` quote + swap-tx + program ids; **live API call** via `/admin` Raydium quote preview card | Low — fetches mainnet route in front of judge |
+| MoonPay | **3/4 Solid** | URL builder + **server-side HMAC-SHA256 signing** route at `/api/moonpay/sign`, button on /setup | Low — signed URLs in prod, sandbox fallback if no secret |
+| Arcium | **2/4 Skeleton-mechanism-core** | `confidential-ixs/` skeleton + `lib/arcium.ts` SHA-256 stub + intent hash on-chain | Medium — frame as "Cohort 2 testnet target" |
+| Reflect | **2.5/4 Frontend-shipped + tx-builder** | Live ReflectCard + `buildReflectDepositIx` Anchor-style ix builder ready (mainnet env-gated) | Medium — frame as "frontend + tx wiring shipped, mainnet activation env-bound" |
+| Altitude (Squads) | **2/4 Detection live** | `lib/squads.ts` reads + decodes Squads V4 multisig accounts; `/admin` Pool state shows authority *type* (single-key / Squads N/M / program-owned) live on-chain | Low — currently single-key, badge swaps to "Squads 2/3" when migrated |
 
 # Recommended track claims (prioritized)
 

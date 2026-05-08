@@ -24,6 +24,8 @@ import {
 import { useToast } from "@/components/toast";
 import { formatUsdc, shortAddress } from "@/lib/utils";
 import { CURRENT_NETWORK } from "@/lib/constants";
+import { RaydiumQuoteCard } from "@/components/raydium-quote-card";
+import { useAuthorityClassification } from "@/lib/hooks/use-authority-class";
 
 export default function AdminPage() {
   const { connection } = useConnection();
@@ -31,6 +33,7 @@ export default function AdminPage() {
   const toast = useToast();
   const { pool, poolPubkey, loading: poolLoading } = usePool();
   const { window: currentWindow, windowPubkey } = useCurrentWindow();
+  const authorityClass = useAuthorityClassification(pool?.authority ?? null);
 
   const [busyAction, setBusyAction] = useState<
     "init_pool" | "init_window" | "mint_usdc" | "trigger" | "swap" | null
@@ -221,7 +224,36 @@ export default function AdminPage() {
             />
             <Row
               label="Authority"
-              value={shortAddress(pool.authority.toBase58())}
+              value={
+                <span style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>
+                  {shortAddress(pool.authority.toBase58())}
+                  {authorityClass?.kind === "multisig" && (
+                    <span
+                      className="badge badge--accent"
+                      style={{ fontSize: 10 }}
+                      title={`Squads V4 multisig — ${authorityClass.threshold}-of-${authorityClass.memberCount}`}
+                    >
+                      Squads {authorityClass.threshold}/{authorityClass.memberCount}
+                    </span>
+                  )}
+                  {authorityClass?.kind === "wallet" && (
+                    <span
+                      className="tiny mute2"
+                      title="Single-key authority. Migrate to Squads multisig for production."
+                    >
+                      single-key
+                    </span>
+                  )}
+                  {authorityClass?.kind === "program" && (
+                    <span
+                      className="tiny mute2"
+                      title={`Owned by ${authorityClass.owner.toBase58()}`}
+                    >
+                      program-owned
+                    </span>
+                  )}
+                </span>
+              }
             />
             <Row
               label="Active window"
@@ -448,6 +480,8 @@ export default function AdminPage() {
           </div>
         </section>
       )}
+
+      <RaydiumQuoteCard />
 
       <ActionCard
         title="trigger_aggregate"

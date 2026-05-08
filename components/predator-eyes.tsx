@@ -184,6 +184,17 @@ export function PredatorEyes() {
             <stop offset="55%" stopColor="#06b6d4" stopOpacity="0.07" />
             <stop offset="100%" stopColor="#06b6d4" stopOpacity="0" />
           </radialGradient>
+
+          {/* Per-eye clipPaths in LOCAL coordinate space (origin = eye center).
+              Each clipPath is referenced inside its eye's transform group so
+              the path coords align with the iris inset bowl. Pupil never
+              escapes the visible eye outline regardless of cursor position. */}
+          <clipPath id="clip-eye-left" clipPathUnits="userSpaceOnUse">
+            <path d={felineClipPath("left")} />
+          </clipPath>
+          <clipPath id="clip-eye-right" clipPathUnits="userSpaceOnUse">
+            <path d={felineClipPath("right")} />
+          </clipPath>
         </defs>
 
         {/* Halos behind each eye */}
@@ -198,27 +209,35 @@ export function PredatorEyes() {
 }
 
 /**
- * Natural feline eye path. Geometry written for the RIGHT eye (wing
- * tip at +x); LEFT eye mirrors x so each eye's outer corner points
- * AWAY from the pair's center axis.
+ * Sharp feline eye path with explicit pointed corners. Geometry for
+ * the RIGHT eye; LEFT mirrors x so each eye's outer corner points
+ * away from the pair's center.
  *
- * Proportions modelled after an actual cat at rest:
- *   - Almond ratio width:height ≈ 3.2 : 1
- *   - Outer corner sits ~12px higher than inner (alert tilt)
- *   - Top arc rises 1.7x further than bottom drops (asymmetric eyelid)
- *   - No exaggerated makeup-style wing — clean upturn only
+ * Sharpness trick: straight L segments enter and leave each tip at
+ * different angles, so the corner stays a true point. Smooth cubic
+ * curves only fill the top + bottom arcs between the tips. This
+ * survives the turbulence displacement filter — the inner sharp
+ * outline reads clearly even when the outer flame layers smear.
+ *
+ * Proportions:
+ *   - Width:height ≈ 3.4 : 1
+ *   - Outer corner ~14px higher than inner (alert predator tilt)
+ *   - Both tips meet the arcs at ~70° corner angles → pointed
  */
 function felineEyePath(side: "left" | "right"): string {
   const flip = side === "left" ? -1 : 1;
   const X = (n: number) => n * flip;
 
   return [
-    `M ${X(-115)} 4`,                                       // inner corner
-    `C ${X(-75)} ${-22}, ${X(-25)} ${-47}, ${X(15)} ${-47}`, // top arc up
-    `C ${X(70)} ${-47}, ${X(105)} ${-32}, ${X(125)} ${-18}`, // top arc bending down
-    `L ${X(130)} ${-8}`,                                     // outer corner (slight upturn)
-    `C ${X(105)} 16, ${X(50)} 27, ${X(0)} 27`,                // bottom arc
-    `C ${X(-55)} 25, ${X(-98)} 18, ${X(-115)} 4`,             // back to inner
+    `M ${X(-118)} 6`,                                       // inner tip (sharp point)
+    `L ${X(-92)} ${-12}`,                                   // straight up-out from inner
+    `C ${X(-50)} ${-42}, ${X(20)} ${-50}, ${X(75)} ${-46}`,  // top apex curve
+    `C ${X(105)} ${-42}, ${X(122)} ${-30}, ${X(130)} ${-16}`, // approach outer
+    `L ${X(132)} ${-8}`,                                     // outer tip apex
+    `L ${X(124)} 2`,                                         // sharp turn at outer
+    `C ${X(108)} 18, ${X(55)} 28, ${X(0)} 28`,                // bottom arc
+    `C ${X(-55)} 26, ${X(-92)} 18, ${X(-104)} 14`,            // approach inner from below
+    `L ${X(-118)} 6`,                                         // close to inner tip
     `Z`,
   ].join(" ");
 }
@@ -266,31 +285,34 @@ function FelineEye({
       {/* Iris — slightly inset feline path */}
       <FelineIris side={side} />
 
-      {/* Pupil — vertical slit, tracks cursor */}
-      <g transform={`translate(${px}, ${py})`}>
-        <ellipse
-          rx="14"
-          ry="40"
-          fill="#06b6d4"
-          opacity="0.3"
-          filter="url(#eye-glow)"
-        />
-        <ellipse
-          rx="9"
-          ry="34"
-          fill="#020409"
-          stroke="#22d3ee"
-          strokeWidth="0.9"
-        />
-        <ellipse rx="4" ry="26" fill="#06b6d4" opacity="0.85" />
-        <ellipse
-          cx="-2"
-          cy="-12"
-          rx="2.2"
-          ry="6"
-          fill="#ecfeff"
-          opacity="0.95"
-        />
+      {/* Pupil — vertical slit, tracks cursor, clipped to iris bowl
+          so it never escapes the visible eye outline. */}
+      <g clipPath={`url(#clip-eye-${side})`}>
+        <g transform={`translate(${px}, ${py})`}>
+          <ellipse
+            rx="12"
+            ry="30"
+            fill="#06b6d4"
+            opacity="0.3"
+            filter="url(#eye-glow)"
+          />
+          <ellipse
+            rx="8"
+            ry="26"
+            fill="#020409"
+            stroke="#22d3ee"
+            strokeWidth="0.9"
+          />
+          <ellipse rx="3.5" ry="20" fill="#06b6d4" opacity="0.85" />
+          <ellipse
+            cx="-1.8"
+            cy="-9"
+            rx="2"
+            ry="5"
+            fill="#ecfeff"
+            opacity="0.95"
+          />
+        </g>
       </g>
     </g>
   );
@@ -299,15 +321,38 @@ function FelineEye({
 function FelineIris({ side }: { side: "left" | "right" }) {
   const flip = side === "left" ? -1 : 1;
   const X = (n: number) => n * flip;
-  // Slightly inset path that fills the eye with cyan iris gradient
+  // Slightly inset version of the outline path — drives both the iris
+  // fill and the pupil clipPath. Inset ~6px so the iris doesn't bleed
+  // through the sharp outline stroke.
   const d = [
-    `M ${X(-105)} 4`,
-    `C ${X(-68)} ${-18}, ${X(-22)} ${-42}, ${X(15)} ${-42}`,
-    `C ${X(64)} ${-42}, ${X(96)} ${-28}, ${X(115)} ${-15}`,
-    `L ${X(118)} ${-7}`,
-    `C ${X(95)} 14, ${X(45)} 24, ${X(0)} 24`,
-    `C ${X(-50)} 22, ${X(-90)} 16, ${X(-105)} 4`,
+    `M ${X(-110)} 6`,
+    `L ${X(-86)} ${-10}`,
+    `C ${X(-46)} ${-38}, ${X(20)} ${-46}, ${X(72)} ${-42}`,
+    `C ${X(100)} ${-38}, ${X(116)} ${-26}, ${X(124)} ${-14}`,
+    `L ${X(125)} ${-7}`,
+    `L ${X(118)} 2`,
+    `C ${X(102)} 16, ${X(52)} 25, ${X(0)} 25`,
+    `C ${X(-52)} 23, ${X(-86)} 16, ${X(-98)} 12`,
+    `L ${X(-110)} 6`,
     `Z`,
   ].join(" ");
   return <path d={d} fill="url(#iris-grad)" opacity="0.32" />;
+}
+
+/** Same shape as FelineIris but exposed as a string for clipPath use. */
+function felineClipPath(side: "left" | "right"): string {
+  const flip = side === "left" ? -1 : 1;
+  const X = (n: number) => n * flip;
+  return [
+    `M ${X(-110)} 6`,
+    `L ${X(-86)} ${-10}`,
+    `C ${X(-46)} ${-38}, ${X(20)} ${-46}, ${X(72)} ${-42}`,
+    `C ${X(100)} ${-38}, ${X(116)} ${-26}, ${X(124)} ${-14}`,
+    `L ${X(125)} ${-7}`,
+    `L ${X(118)} 2`,
+    `C ${X(102)} 16, ${X(52)} 25, ${X(0)} 25`,
+    `C ${X(-52)} 23, ${X(-86)} 16, ${X(-98)} 12`,
+    `L ${X(-110)} 6`,
+    `Z`,
+  ].join(" ");
 }

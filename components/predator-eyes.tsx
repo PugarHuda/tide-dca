@@ -27,6 +27,7 @@ import { useEffect, useRef, useState } from "react";
 export function PredatorEyes() {
   const ref = useRef<HTMLDivElement>(null);
   const [cursor, setCursor] = useState({ x: 0, y: 0 });
+  const [scrollY, setScrollY] = useState(0);
   const [reduceMotion, setReduceMotion] = useState(false);
 
   useEffect(() => {
@@ -53,8 +54,21 @@ export function PredatorEyes() {
     return () => window.removeEventListener("mousemove", onMove);
   }, [reduceMotion]);
 
+  // Scroll listener — drives a subtle parallax + pupil "look down" as
+  // the user scrolls into the page. Makes the eyes feel anchored to
+  // the world but tracking the viewer's gaze.
+  useEffect(() => {
+    if (reduceMotion) return;
+    const onScroll = () => setScrollY(window.scrollY);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [reduceMotion]);
+
+  // Pupil tracking: cursor + scroll-driven downward look (capped)
+  const scrollNorm = Math.min(1, scrollY / 1200);
   const px = cursor.x * 22;
-  const py = cursor.y * 8;
+  const py = cursor.y * 8 + scrollNorm * 6; // pupils glance down as user scrolls
 
   return (
     <div ref={ref} className="eyes" aria-hidden>
@@ -66,9 +80,7 @@ export function PredatorEyes() {
         style={{ display: "block", overflow: "visible" }}
       >
         <defs>
-          {/* Macro flame — large, slow displacement. Tuned softer for
-              background-atmospheric use; it should breathe behind the
-              text, not compete with it. */}
+          {/* Macro flame — bold silhouette dance, visible across scroll */}
           <filter
             id="flame-macro"
             x="-50%"
@@ -78,7 +90,7 @@ export function PredatorEyes() {
           >
             <feTurbulence
               type="fractalNoise"
-              baseFrequency="0.018 0.05"
+              baseFrequency="0.02 0.055"
               numOctaves="2"
               seed="3"
               result="t1"
@@ -87,14 +99,14 @@ export function PredatorEyes() {
                 <>
                   <animate
                     attributeName="seed"
-                    values="3;7;1;9;5;2;3"
-                    dur="2s"
+                    values="3;9;2;11;5;7;3"
+                    dur="1.6s"
                     repeatCount="indefinite"
                   />
                   <animate
                     attributeName="baseFrequency"
-                    values="0.018 0.05;0.028 0.07;0.014 0.04;0.018 0.05"
-                    dur="3.4s"
+                    values="0.02 0.055;0.035 0.085;0.015 0.04;0.02 0.055"
+                    dur="2.6s"
                     repeatCount="indefinite"
                   />
                 </>
@@ -103,13 +115,13 @@ export function PredatorEyes() {
             <feDisplacementMap
               in="SourceGraphic"
               in2="t1"
-              scale="14"
+              scale="18"
               xChannelSelector="R"
               yChannelSelector="G"
             />
           </filter>
 
-          {/* Micro flame — fast, very subtle shimmer */}
+          {/* Micro flame — fast shimmer on the silhouette */}
           <filter
             id="flame-micro"
             x="-30%"
@@ -119,24 +131,32 @@ export function PredatorEyes() {
           >
             <feTurbulence
               type="fractalNoise"
-              baseFrequency="0.1 0.18"
-              numOctaves="2"
+              baseFrequency="0.09 0.2"
+              numOctaves="3"
               seed="5"
               result="t2"
             >
               {!reduceMotion && (
-                <animate
-                  attributeName="seed"
-                  values="5;13;2;9;5"
-                  dur="1.1s"
-                  repeatCount="indefinite"
-                />
+                <>
+                  <animate
+                    attributeName="seed"
+                    values="5;14;2;11;6;5"
+                    dur="0.8s"
+                    repeatCount="indefinite"
+                  />
+                  <animate
+                    attributeName="baseFrequency"
+                    values="0.09 0.2;0.13 0.28;0.07 0.18;0.09 0.2"
+                    dur="1.4s"
+                    repeatCount="indefinite"
+                  />
+                </>
               )}
             </feTurbulence>
             <feDisplacementMap
               in="SourceGraphic"
               in2="t2"
-              scale="5"
+              scale="7"
               xChannelSelector="R"
               yChannelSelector="G"
             />
@@ -178,26 +198,27 @@ export function PredatorEyes() {
 }
 
 /**
- * Path for one feline eye, parameterized by orientation. The inner
- * corner is the side facing toward the center of the face; the outer
- * corner has the upward winged-eyeliner extension.
+ * Natural feline eye path. Geometry written for the RIGHT eye (wing
+ * tip at +x); LEFT eye mirrors x so each eye's outer corner points
+ * AWAY from the pair's center axis.
+ *
+ * Proportions modelled after an actual cat at rest:
+ *   - Almond ratio width:height ≈ 3.2 : 1
+ *   - Outer corner sits ~12px higher than inner (alert tilt)
+ *   - Top arc rises 1.7x further than bottom drops (asymmetric eyelid)
+ *   - No exaggerated makeup-style wing — clean upturn only
  */
 function felineEyePath(side: "left" | "right"): string {
-  // Right-eye geometry; left-eye is x-flipped via `flip`
-  const flip = side === "right" ? 1 : -1;
+  const flip = side === "left" ? -1 : 1;
   const X = (n: number) => n * flip;
 
-  // Inner corner is at small positive x for right (closer to center),
-  // outer corner is at negative x with upward wing for right. For left,
-  // x flips so outer wing is on the LEFT side (away from center).
   return [
-    `M ${X(105)} 4`,                                    // inner corner tip
-    `C ${X(60)} ${-30}, ${X(0)} ${-44}, ${X(-60)} ${-40}`, // top arc rolling up
-    `C ${X(-100)} ${-38}, ${X(-130)} ${-36}, ${X(-150)} ${-44}`,
-    `L ${X(-160)} ${-52}`,                              // wing apex (sharp)
-    `L ${X(-128)} ${-22}`,                              // wing under-tip
-    `C ${X(-90)} ${-8}, ${X(-30)} 12, ${X(20)} 18`,     // bottom arc back
-    `C ${X(60)} 18, ${X(90)} 14, ${X(105)} 4`,
+    `M ${X(-115)} 4`,                                       // inner corner
+    `C ${X(-75)} ${-22}, ${X(-25)} ${-47}, ${X(15)} ${-47}`, // top arc up
+    `C ${X(70)} ${-47}, ${X(105)} ${-32}, ${X(125)} ${-18}`, // top arc bending down
+    `L ${X(130)} ${-8}`,                                     // outer corner (slight upturn)
+    `C ${X(105)} 16, ${X(50)} 27, ${X(0)} 27`,                // bottom arc
+    `C ${X(-55)} 25, ${X(-98)} 18, ${X(-115)} 4`,             // back to inner
     `Z`,
   ].join(" ");
 }
@@ -276,17 +297,16 @@ function FelineEye({
 }
 
 function FelineIris({ side }: { side: "left" | "right" }) {
-  const flip = side === "right" ? 1 : -1;
+  const flip = side === "left" ? -1 : 1;
   const X = (n: number) => n * flip;
   // Slightly inset path that fills the eye with cyan iris gradient
   const d = [
-    `M ${X(98)} 3`,
-    `C ${X(55)} ${-26}, ${X(0)} ${-38}, ${X(-58)} ${-34}`,
-    `C ${X(-95)} ${-32}, ${X(-122)} ${-30}, ${X(-138)} ${-36}`,
-    `L ${X(-145)} ${-42}`,
-    `L ${X(-118)} ${-18}`,
-    `C ${X(-85)} ${-6}, ${X(-30)} 10, ${X(20)} 16`,
-    `C ${X(58)} 16, ${X(85)} 12, ${X(98)} 3`,
+    `M ${X(-105)} 4`,
+    `C ${X(-68)} ${-18}, ${X(-22)} ${-42}, ${X(15)} ${-42}`,
+    `C ${X(64)} ${-42}, ${X(96)} ${-28}, ${X(115)} ${-15}`,
+    `L ${X(118)} ${-7}`,
+    `C ${X(95)} 14, ${X(45)} 24, ${X(0)} 24`,
+    `C ${X(-50)} 22, ${X(-90)} 16, ${X(-105)} 4`,
     `Z`,
   ].join(" ");
   return <path d={d} fill="url(#iris-grad)" opacity="0.32" />;

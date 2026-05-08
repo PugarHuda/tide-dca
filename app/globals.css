@@ -1139,7 +1139,12 @@ textarea {
 
 .stats {
   border-bottom: 1px solid var(--line);
-  background: var(--bg-1);
+  /* Transparent so the fixed predator-eye layer stays visible through
+     the section. Sections rely on borders + spacing for rhythm now,
+     not background color. */
+  background: transparent;
+  position: relative;
+  z-index: 1;
 }
 .stats__grid {
   max-width: 1240px;
@@ -1299,10 +1304,13 @@ textarea {
 }
 
 .cmp {
-  background: var(--bg-1);
+  /* Transparent so the fixed predator-eye layer stays visible. */
+  background: transparent;
   border-top: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
   padding: 100px 28px;
+  position: relative;
+  z-index: 1;
 }
 .cmp__grid {
   max-width: 1240px;
@@ -1557,13 +1565,12 @@ textarea {
   gap: 4px;
 }
 
-/* Predator eyes — atmospheric BACKGROUND of the hero. Sits behind
-   the text, low z-index, low opacity so it doesn't compete with the
-   headline. Pointer-events disabled so CTAs underneath stay clickable.
-   The minimalist hero variant relies on this one visual for atmosphere
-   instead of stacked decorative layers. */
-.hero__eyes-bg {
-  position: absolute;
+/* Predator eyes — viewport-fixed atmospheric layer that persists
+   across the whole landing scroll. Behind every section, low opacity,
+   pointer-events disabled. Cursor + scroll tracking happens inside
+   PredatorEyes itself. */
+.landing-eyes-fixed {
+  position: fixed;
   inset: 0;
   display: flex;
   align-items: center;
@@ -1571,11 +1578,10 @@ textarea {
   z-index: 0;
   pointer-events: none;
   overflow: hidden;
-  opacity: 0.55;
-  /* Vignette-style mask so the eyes fade at the edges, blending into
-     the page background rather than terminating with a hard rectangle. */
-  -webkit-mask-image: radial-gradient(ellipse at center, #000 35%, transparent 78%);
-  mask-image: radial-gradient(ellipse at center, #000 35%, transparent 78%);
+  opacity: 0.5;
+  /* Radial vignette so the eyes fade at edges, blend into bg */
+  -webkit-mask-image: radial-gradient(ellipse 60% 40% at center, #000 30%, transparent 80%);
+  mask-image: radial-gradient(ellipse 60% 40% at center, #000 30%, transparent 80%);
 }
 .eyes {
   width: min(92vw, 880px);

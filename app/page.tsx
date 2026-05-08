@@ -78,6 +78,11 @@ export default function LandingPage() {
 
   return (
     <main className="landing">
+      {/* Predator eyes — fixed position, follow viewport across scroll.
+          Atmospheric guardian on every section. */}
+      <div className="landing-eyes-fixed" aria-hidden>
+        <PredatorEyes />
+      </div>
       <Hero
         openRemainingS={openRemainingS}
         fillPct={fillPct}
@@ -135,10 +140,6 @@ function Hero({
 }) {
   return (
     <section className="hero hero--minimal">
-      {/* Predator eyes — atmospheric background, behind text */}
-      <div className="hero__eyes-bg" aria-hidden>
-        <PredatorEyes />
-      </div>
       <div className="hero__inner hero__inner--center">
         <EyebrowTicker
           isLive={isLive}

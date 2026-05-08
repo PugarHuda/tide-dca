@@ -49,18 +49,25 @@ export function SquadsCreateButton() {
       tx.feePayer = wallet.publicKey;
       tx.partialSign(createKey);
 
-      // Pre-flight to surface devnet "Squads not deployed" cleanly.
+      // Pre-flight to surface devnet "Squads not initialized on this cluster" cleanly.
       const sim = await connection.simulateTransaction(tx);
       if (sim.value.err) {
         const msg =
           typeof sim.value.err === "string"
             ? sim.value.err
             : JSON.stringify(sim.value.err);
-        const isNotDeployed =
-          /AccountNotFound|ProgramAccountNotFound|InvalidProgramId/i.test(msg);
+        const logs = (sim.value.logs ?? []).join(" ");
+        // Squads V4 IS deployed on devnet, but its program_config PDA
+        // isn't initialized there — Squads-internal setup is mainnet-only.
+        // We catch both "program missing" (AccountNotFound) and "program
+        // present but not initialized" (Custom 3012 / AccountNotInitialized).
+        const isClusterUnsupported =
+          /AccountNotFound|ProgramAccountNotFound|InvalidProgramId|AccountNotInitialized|"Custom":\s*3012/i.test(
+            msg + " " + logs,
+          );
         toast.error(
-          isNotDeployed
-            ? "Squads V4 program is mainnet-only. Tx is correctly built — deploy from a mainnet wallet to actually create."
+          isClusterUnsupported
+            ? "Squads V4 isn't bootstrapped on this cluster. Tx is correctly built — fire from a mainnet wallet to actually create."
             : `Squads create simulation failed: ${msg}`,
         );
         return;

@@ -90,7 +90,7 @@ import {
   getAssociatedTokenAddressSync,
   createAssociatedTokenAccountIdempotentInstruction,
 } from "@solana/spl-token";
-import { createHash } from "node:crypto";
+import { sha256 } from "@noble/hashes/sha256";
 
 /** Reflect rUSDC mint — yield-bearing receipt token. Env-bound. */
 export const REFLECT_RUSDC_MINT_ENV =
@@ -102,7 +102,8 @@ export const REFLECT_RUSDC_MINT_ENV =
  * matching Anchor convention — confirmed in their on-chain frame.
  */
 function reflectDiscriminator(snake: string): Buffer {
-  return createHash("sha256").update(`global:${snake}`).digest().subarray(0, 8);
+  const hash = sha256(new TextEncoder().encode(`global:${snake}`));
+  return Buffer.from(hash.slice(0, 8));
 }
 
 export type ReflectDepositParams = {

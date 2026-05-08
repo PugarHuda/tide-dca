@@ -85,18 +85,31 @@ import {
   TransactionInstruction,
   SystemProgram,
 } from "@solana/web3.js";
-import { createHash } from "node:crypto";
+import { sha256 } from "@noble/hashes/sha256";
 
-const TREASURY_PDA_SEED = Buffer.from("squad");
-const PROGRAM_TREASURY = (() => {
-  // Squads protocol fee account — single derivation, hardcoded so we don't
-  // round-trip RPC for it. Derivation: PDA([b"squad", b"treasury"]).
-  // For broad compatibility we ship the resolved pubkey directly:
-  return new PublicKey("3ZVtRjENH6jExDp2T84cJqLfJsr1ETWTUHdjuAUmFxiB");
-})();
+// Squads V4 program_config + treasury are derived from the program. The
+// program_config is a singleton PDA storing the protocol's fee config and
+// the *real* treasury pubkey. Both must be passed as accounts in the ix.
+//
+// Note: on clusters where Squads isn't bootstrapped (currently every cluster
+// except mainnet-beta), program_config is uninitialized and the simulation
+// reverts with Anchor's `AccountNotInitialized` (Custom 3012) — caller must
+// surface that as "mainnet-only" rather than a build error.
+function deriveSquadsProgramConfig() {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("multisig"), Buffer.from("program_config")],
+    SQUADS_V4_PROGRAM_ID,
+  );
+}
+// Mainnet treasury — read from program_config on chain in production. Hard-
+// coded fallback used when the simulation will fail anyway (devnet).
+const FALLBACK_TREASURY = new PublicKey(
+  "3ZVtRjENH6jExDp2T84cJqLfJsr1ETWTUHdjuAUmFxiB",
+);
 
 function squadsDiscriminator(snake: string): Buffer {
-  return createHash("sha256").update(`global:${snake}`).digest().subarray(0, 8);
+  const hash = sha256(new TextEncoder().encode(`global:${snake}`));
+  return Buffer.from(hash.slice(0, 8));
 }
 
 export type CreateMultisigParams = {
@@ -181,10 +194,13 @@ export function buildCreateMultisigIx(
 
   const data = Buffer.concat([squadsDiscriminator("multisig_create_v2"), args]);
 
+  const [programConfig] = deriveSquadsProgramConfig();
+
   const instruction = new TransactionInstruction({
     programId: SQUADS_V4_PROGRAM_ID,
     keys: [
-      { pubkey: PROGRAM_TREASURY, isSigner: false, isWritable: true },
+      { pubkey: programConfig, isSigner: false, isWritable: false },
+      { pubkey: FALLBACK_TREASURY, isSigner: false, isWritable: true },
       { pubkey: multisigPda, isSigner: false, isWritable: true },
       { pubkey: createKey.publicKey, isSigner: true, isWritable: false },
       { pubkey: params.creator, isSigner: true, isWritable: true },
@@ -192,9 +208,6 @@ export function buildCreateMultisigIx(
     ],
     data,
   });
-
-  // Touch TREASURY_PDA_SEED so unused-import lint is silent.
-  void TREASURY_PDA_SEED;
 
   return { instruction, multisigPda, createKey };
 }

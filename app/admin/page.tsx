@@ -26,6 +26,10 @@ import { formatUsdc, shortAddress } from "@/lib/utils";
 import { CURRENT_NETWORK } from "@/lib/constants";
 import { RaydiumQuoteCard } from "@/components/raydium-quote-card";
 import { useAuthorityClassification } from "@/lib/hooks/use-authority-class";
+import { ReflectStakeButton } from "@/components/reflect-stake-button";
+import { SquadsCreateButton } from "@/components/squads-create-button";
+import { PythOracleCard } from "@/components/pyth-oracle-card";
+import { PrivyVerifyButton } from "@/components/privy-verify-button";
 
 export default function AdminPage() {
   const { connection } = useConnection();
@@ -483,6 +487,8 @@ export default function AdminPage() {
 
       <RaydiumQuoteCard />
 
+      <PythOracleCard />
+
       <ActionCard
         title="trigger_aggregate"
         description={
@@ -558,6 +564,7 @@ export default function AdminPage() {
             label="Pool authority"
             target="Squads V4 multisig (Altitude)"
             href="https://app.squads.so"
+            extra={<SquadsCreateButton />}
           />
           <ProdRow
             label="Smart-contract audit"
@@ -576,10 +583,17 @@ export default function AdminPage() {
             label="Idle yield"
             target="Reflect Protocol (USDC vault APY)"
             href="https://reflect.app"
+            extra={<ReflectStakeButton amountUsdc={10} />}
           />
           <ProdRow
             label="Bug bounty"
             target="Immunefi ($50-100K critical tier)"
+          />
+          <ProdRow
+            label="Auth verification"
+            target="Privy server-side token check"
+            href="https://docs.privy.io/guide/server/access-tokens"
+            extra={<PrivyVerifyButton />}
           />
         </ul>
       </section>
@@ -591,10 +605,12 @@ function ProdRow({
   label,
   target,
   href,
+  extra,
 }: {
   label: string;
   target: string;
   href?: string;
+  extra?: React.ReactNode;
 }) {
   return (
     <li
@@ -605,29 +621,33 @@ function ProdRow({
         gap: 12,
         padding: "8px 0",
         borderBottom: "1px solid var(--line)",
+        flexWrap: "wrap",
       }}
     >
       <span className="muted" style={{ fontSize: 13 }}>
         {label}
       </span>
-      {href ? (
-        <a
-          href={href}
-          target="_blank"
-          rel="noreferrer"
-          className="mono"
-          style={{ color: "var(--accent)", fontSize: 13 }}
-        >
-          {target} ↗
-        </a>
-      ) : (
-        <span
-          className="mono"
-          style={{ color: "var(--text-1)", fontSize: 13 }}
-        >
-          {target}
-        </span>
-      )}
+      <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        {href ? (
+          <a
+            href={href}
+            target="_blank"
+            rel="noreferrer"
+            className="mono"
+            style={{ color: "var(--accent)", fontSize: 13 }}
+          >
+            {target} ↗
+          </a>
+        ) : (
+          <span
+            className="mono"
+            style={{ color: "var(--text-1)", fontSize: 13 }}
+          >
+            {target}
+          </span>
+        )}
+        {extra}
+      </span>
     </li>
   );
 }

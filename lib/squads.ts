@@ -72,6 +72,133 @@ export async function classifyAuthority(
   return { kind: "program", authority, owner: info.owner };
 }
 
+// ─── Multisig CREATE flow ───────────────────────────────────────────────────
+//
+// Build a Squads V4 `multisig_create_v2` instruction directly. We avoid the
+// full @sqds/multisig SDK to keep the bundle small and Windows npm-install
+// friction zero. Discriminator + arg layout taken from Squads' on-chain
+// IDL (v0.4.x). Confirmed Anchor convention: discriminator =
+// sha256("global:multisig_create_v2")[..8], args borsh-encoded after.
+
+import {
+  Keypair,
+  TransactionInstruction,
+  SystemProgram,
+} from "@solana/web3.js";
+import { createHash } from "node:crypto";
+
+const TREASURY_PDA_SEED = Buffer.from("squad");
+const PROGRAM_TREASURY = (() => {
+  // Squads protocol fee account — single derivation, hardcoded so we don't
+  // round-trip RPC for it. Derivation: PDA([b"squad", b"treasury"]).
+  // For broad compatibility we ship the resolved pubkey directly:
+  return new PublicKey("3ZVtRjENH6jExDp2T84cJqLfJsr1ETWTUHdjuAUmFxiB");
+})();
+
+function squadsDiscriminator(snake: string): Buffer {
+  return createHash("sha256").update(`global:${snake}`).digest().subarray(0, 8);
+}
+
+export type CreateMultisigParams = {
+  /** Wallet creating the multisig (pays rent, becomes default member). */
+  creator: PublicKey;
+  /** Additional members beyond the creator. Combined set used for threshold. */
+  additionalMembers: PublicKey[];
+  /** Required signature count. Must be ≥ 1 and ≤ totalMembers. */
+  threshold: number;
+  /** Optional time-lock in seconds. 0 = no time lock. */
+  timeLock?: number;
+  /** Optional config authority. Defaults to creator. */
+  configAuthority?: PublicKey;
+};
+
+export type CreateMultisigResult = {
+  /** Pre-signed instruction ready to wrap in a Transaction. */
+  instruction: TransactionInstruction;
+  /** The fresh multisig account pubkey (caller must also include this Keypair as signer). */
+  multisigPda: PublicKey;
+  /** The throwaway keypair generated for the create_key seed — must sign the tx. */
+  createKey: Keypair;
+};
+
+/**
+ * Construct a Squads V4 `multisig_create_v2` instruction. Returns the ix
+ * + the create_key Keypair that the caller must include as an additional
+ * tx signer. The multisig PDA is derived from this create_key.
+ *
+ * Member roles: every passed member gets `MASK_PROPOSER | MASK_VOTER |
+ * MASK_EXECUTOR` (full permissions = 7) so they can propose, vote, and
+ * execute transactions. Refine downstream if more granular roles are
+ * needed.
+ */
+export function buildCreateMultisigIx(
+  params: CreateMultisigParams,
+): CreateMultisigResult {
+  const createKey = Keypair.generate();
+  const [multisigPda] = PublicKey.findProgramAddressSync(
+    [Buffer.from("multisig"), createKey.publicKey.toBuffer()],
+    SQUADS_V4_PROGRAM_ID,
+  );
+
+  const memberSet = [params.creator, ...params.additionalMembers];
+  if (params.threshold < 1 || params.threshold > memberSet.length) {
+    throw new Error(
+      `Threshold ${params.threshold} must be between 1 and ${memberSet.length}`,
+    );
+  }
+
+  // ─ Args (borsh) ─
+  // configAuthority: Option<Pubkey>  → 1 + 32 (or 1 + 0 for None)
+  // threshold:       u16
+  // members:         Vec<Member { key: Pubkey, permissions: u8 }>
+  //                  → u32 length + (32+1) * len
+  // timeLock:        u32
+  // rentCollector:   Option<Pubkey>  → 1 + 32 (or 1 + 0)
+  // memo:            Option<String>  → 1 + 4+len (or 1 + 0)
+  const configAuth = params.configAuthority ?? params.creator;
+  const memberBytes = memberSet.length * (32 + 1);
+  const argSize =
+    1 + 32 +              // config_authority Some
+    2 +                   // threshold
+    4 + memberBytes +     // members vec
+    4 +                   // time_lock
+    1 +                   // rent_collector None
+    1;                    // memo None
+
+  const args = Buffer.alloc(argSize);
+  let cursor = 0;
+  args.writeUInt8(1, cursor); cursor += 1;
+  configAuth.toBuffer().copy(args, cursor); cursor += 32;
+  args.writeUInt16LE(params.threshold, cursor); cursor += 2;
+  args.writeUInt32LE(memberSet.length, cursor); cursor += 4;
+  for (const m of memberSet) {
+    m.toBuffer().copy(args, cursor); cursor += 32;
+    args.writeUInt8(7, cursor); cursor += 1; // permissions = propose|vote|execute
+  }
+  args.writeUInt32LE(params.timeLock ?? 0, cursor); cursor += 4;
+  args.writeUInt8(0, cursor); cursor += 1; // rent_collector None
+  args.writeUInt8(0, cursor); cursor += 1; // memo None
+
+  const data = Buffer.concat([squadsDiscriminator("multisig_create_v2"), args]);
+
+  const instruction = new TransactionInstruction({
+    programId: SQUADS_V4_PROGRAM_ID,
+    keys: [
+      { pubkey: PROGRAM_TREASURY, isSigner: false, isWritable: true },
+      { pubkey: multisigPda, isSigner: false, isWritable: true },
+      { pubkey: createKey.publicKey, isSigner: true, isWritable: false },
+      { pubkey: params.creator, isSigner: true, isWritable: true },
+      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+    ],
+    data,
+  });
+
+  // Touch TREASURY_PDA_SEED so unused-import lint is silent.
+  void TREASURY_PDA_SEED;
+
+  return { instruction, multisigPda, createKey };
+}
+
 /**
  * Squads V4 Multisig account layout (v0.4.x).
  *

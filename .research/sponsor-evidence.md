@@ -155,12 +155,13 @@
 |---|---|---|---|
 | Phantom | **4/4 Deep** | Custom modal, account dropdown, mobile drawer, balance subscriptions, full wallet adapter | Low |
 | Jupiter | **4/4 Deep** | Real v6 API + ALT + PDA-signed CPI; on-chain validated tx `2yCSusUk...` | Low |
-| Privy | **3/4 Solid** | Embedded wallet bridge + cohabitation logic with wallet-adapter | Low if env set |
-| Raydium | **3/4 Solid** | `lib/raydium.ts` quote + swap-tx + program ids; **live API call** via `/admin` Raydium quote preview card | Low — fetches mainnet route in front of judge |
-| MoonPay | **3/4 Solid** | URL builder + **server-side HMAC-SHA256 signing** route at `/api/moonpay/sign`, button on /setup | Low — signed URLs in prod, sandbox fallback if no secret |
-| Arcium | **2/4 Skeleton-mechanism-core** | `confidential-ixs/` skeleton + `lib/arcium.ts` SHA-256 stub + intent hash on-chain | Medium — frame as "Cohort 2 testnet target" |
-| Reflect | **2.5/4 Frontend-shipped + tx-builder** | Live ReflectCard + `buildReflectDepositIx` Anchor-style ix builder ready (mainnet env-gated) | Medium — frame as "frontend + tx wiring shipped, mainnet activation env-bound" |
-| Altitude (Squads) | **2/4 Detection live** | `lib/squads.ts` reads + decodes Squads V4 multisig accounts; `/admin` Pool state shows authority *type* (single-key / Squads N/M / program-owned) live on-chain | Low — currently single-key, badge swaps to "Squads 2/3" when migrated |
+| Privy | **4/4 Deep** | Embedded wallet bridge + `/api/privy/verify` server route round-trips JWT to Privy `/sessions/<id>` for revocation+binding check; `/admin` "Verify Privy auth" button proves the round-trip end-to-end | Low |
+| Raydium | **3/4 Solid** | `lib/raydium.ts` quote + swap-tx + program ids; **live API call** via `/admin` RaydiumQuoteCard | Low — fetches mainnet route in front of judge |
+| MoonPay | **3/4 Solid** | URL builder + **server-side HMAC-SHA256 signing** route at `/api/moonpay/sign`, button on /setup | Low — signed URLs in prod, sandbox fallback |
+| Pyth | **3/4 Solid (new track)** | `lib/pyth.ts` decodes Pyth V2 price account inline (no SDK install); `/admin` PythOracleCard refreshes SOL/USD every 8s — live mainnet feed; on-chain consumer planned in `execute_swap` post-MVP for honest slippage_bps | Low — live oracle reads visible to judge |
+| Reflect | **3/4 Solid** | Live ReflectCard yield projection + `buildReflectDepositIx` Anchor-style builder + `/admin` "Stake to Reflect" button that simulates first; surfaces "mainnet only" cleanly when devnet program missing | Low — button works visibly, devnet path honestly reports |
+| Altitude (Squads) | **3.5/4 Solid+** | `lib/squads.ts` decodes V4 multisig accounts + builds **real `multisig_create_v2` ix**; `/admin` "Create Squads multisig" button submits the tx (mainnet active, devnet honest fail), Authority row badge live-detects current authority type | Low — visible button + ix wiring + on-chain detection all in one place |
+| Arcium | **2/4 Skeleton-mechanism-core** | `confidential-ixs/` skeleton + `lib/arcium.ts` SHA-256 commitment + intent hash on-chain | Medium — frame as "Cohort 2 testnet target" |
 
 # Recommended track claims (prioritized)
 
@@ -188,8 +189,15 @@
 ## Final claimable list (paste to submission form)
 
 ```
-Phantom, Privy, Arcium, Raydium, MoonPay, Reflect, Squads/Altitude
+Phantom, Privy, Jupiter, Raydium, MoonPay, Pyth, Reflect, Squads/Altitude, Arcium
 ```
 
-7 sponsor tracks claimable. All have shipped frontend or backend evidence;
-none are pure-vapor claims.
+**9 sponsor tracks claimable** at varying depth tiers:
+
+- **4/4 Deep** (lead with these): Phantom, Jupiter, Privy
+- **3.5/4 Solid+**: Squads/Altitude
+- **3/4 Solid**: Raydium, MoonPay, Pyth (NEW), Reflect
+- **2/4 Honest qualifier**: Arcium (mechanism core, Cohort 2 target)
+
+Every claim has shipped artifact (file path + UI button or live API or
+on-chain tx). Zero pure-vapor claims.

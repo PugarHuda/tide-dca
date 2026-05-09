@@ -1583,10 +1583,8 @@ textarea {
   -webkit-mask-image: radial-gradient(ellipse 65% 45% at center, #000 35%, transparent 82%);
   mask-image: radial-gradient(ellipse 65% 45% at center, #000 35%, transparent 82%);
 }
-/* Predator eyes wrapper — clean cat-eye SVG, viewport-fixed via the
-   .landing-eyes-fixed parent. Subtle breathing pulse + cyan halo via
-   drop-shadow gives atmospheric depth without competing with the
-   landing copy. */
+/* Predator eyes wrapper — animated cat-eye SVG with flame layers,
+   viewport-fixed via the .landing-eyes-fixed parent. */
 .eyes {
   width: min(92vw, 880px);
   aspect-ratio: 760 / 260;
@@ -1597,8 +1595,50 @@ textarea {
   0%, 100% { transform: scale(1); opacity: 0.95; }
   50%      { transform: scale(1.015); opacity: 1; }
 }
+
+/* Flame outline strokes — stroke-dashoffset makes the dash pattern
+   march around the silhouette + transform pulse adds layered scale
+   shimmer. Both GPU-accelerated, never suppressed by browser caching. */
+.flame-flow-out {
+  stroke-dasharray: 26 18;
+  animation:
+    fire-march 2.2s linear infinite,
+    fire-pulse-out 1.3s ease-in-out infinite;
+  transform-origin: center;
+  transform-box: fill-box;
+}
+.flame-flow-mid {
+  stroke-dasharray: 14 10;
+  animation:
+    fire-march 1.1s linear infinite reverse,
+    fire-pulse-mid 0.9s ease-in-out infinite;
+  transform-origin: center;
+  transform-box: fill-box;
+}
+@keyframes fire-march {
+  from { stroke-dashoffset: 0; }
+  to   { stroke-dashoffset: -44; }
+}
+@keyframes fire-pulse-out {
+  0%, 100% { transform: scale(1, 1) skewX(0deg); }
+  25%      { transform: scale(1.04, 0.96) skewX(0.6deg); }
+  50%      { transform: scale(0.98, 1.05) skewX(-0.4deg); }
+  75%      { transform: scale(1.03, 0.98) skewX(0.3deg); }
+}
+@keyframes fire-pulse-mid {
+  0%, 100% { transform: scale(1, 1) skewX(0deg); }
+  33%      { transform: scale(0.96, 1.04) skewX(-0.5deg); }
+  66%      { transform: scale(1.05, 0.97) skewX(0.7deg); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .eyes { animation: none; }
+  .flame-flow-out,
+  .flame-flow-mid {
+    animation: none;
+    stroke-dasharray: none;
+    transform: none;
+  }
 }
 @media (max-width: 600px) {
   .eyes { width: 96vw; }

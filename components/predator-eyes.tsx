@@ -3,29 +3,41 @@
 import { memo, useEffect, useRef, useState } from "react";
 
 /**
- * Predator eyes — clean SVG cat-eye pair, no fire effects.
+ * Animated feline predator eyes with flame outlines.
  *
- * Sharp almond outline with asymmetric upturn (outer corner higher
- * than inner — alert predator tilt). Iris fills with cyan gradient,
- * pupil tracks cursor + glances down as user scrolls. Subtle halo
- * glow behind each eye for atmospheric depth.
+ * Architecture (the version that finally moved without restarting):
+ *   - All keyframes pre-computed at MODULE scope. They're stable
+ *     across re-renders so SMIL <animate> elements never reset.
+ *   - <FlameLayers /> is React.memo'd and takes only `cx` + `side`
+ *     (which never change after mount). Cursor/scroll re-renders
+ *     never touch it.
+ *   - <Pupil /> is a separate component allowed to re-render freely.
  *
- * Fixed-position wrapper (.landing-eyes-fixed) keeps the eyes visible
- * across the entire landing scroll.
+ * Motion sources stacked for cross-browser visibility:
+ *   1. SVG <animate> on path d → silhouette morphs through 6 keyframes
+ *   2. CSS @keyframes on transform → scale + skew pulse
+ *   3. CSS stroke-dashoffset → dash pattern runs around the silhouette
+ *   4. SVG <animate> on ember ovals → upward rise with fade
  */
 
-function felineEyePath(side: "left" | "right"): string {
+// ─── Module-level path generators ───────────────────────────────────────────
+
+function felineEyePath(
+  side: "left" | "right",
+  perturb: number[] = new Array(8).fill(0),
+): string {
   const flip = side === "left" ? -1 : 1;
   const X = (n: number) => n * flip;
+  const p = perturb;
   return [
     `M ${X(-118)} 6`,
     `L ${X(-92)} ${-12}`,
-    `C ${X(-50)} ${-42}, ${X(20)} ${-50}, ${X(75)} ${-46}`,
-    `C ${X(105)} ${-42}, ${X(122)} ${-30}, ${X(130)} ${-16}`,
+    `C ${X(-50 + p[0])} ${-42 + p[1]}, ${X(20 + p[2])} ${-50 + p[3]}, ${X(75)} ${-46}`,
+    `C ${X(105 + p[4])} ${-42 + p[5]}, ${X(122 + p[6])} ${-30 + p[7]}, ${X(130)} ${-16}`,
     `L ${X(132)} ${-8}`,
     `L ${X(124)} 2`,
-    `C ${X(108)} 18, ${X(55)} 28, ${X(0)} 28`,
-    `C ${X(-55)} 26, ${X(-92)} 18, ${X(-104)} 14`,
+    `C ${X(108 - p[0])} ${18 + p[1]}, ${X(55 - p[2])} ${28 - p[3]}, ${X(0)} 28`,
+    `C ${X(-55 + p[4])} ${26 - p[5]}, ${X(-92 + p[6])} ${18 + p[7]}, ${X(-104)} 14`,
     `L ${X(-118)} 6`,
     `Z`,
   ].join(" ");
@@ -48,28 +60,8 @@ function felineClipPath(side: "left" | "right"): string {
   ].join(" ");
 }
 
-/** Generate a perturbed eye outline path. Bezier control points jitter
- *  by small sin/cos deltas based on `perturb` array — produces subtly
- *  different silhouettes per keyframe. Sharp inner/outer corners stay
- *  anchored (hardcoded L points) so the eye keeps its predator look. */
-function felineEyePathPerturbed(
-  side: "left" | "right",
-  p: number[],
-): string {
-  const flip = side === "left" ? -1 : 1;
-  const X = (n: number) => n * flip;
-  return [
-    `M ${X(-118)} 6`,
-    `L ${X(-92)} ${-12}`,
-    `C ${X(-50 + p[0])} ${-42 + p[1]}, ${X(20 + p[2])} ${-50 + p[3]}, ${X(75)} ${-46}`,
-    `C ${X(105 + p[4])} ${-42 + p[5]}, ${X(122 + p[6])} ${-30 + p[7]}, ${X(130)} ${-16}`,
-    `L ${X(132)} ${-8}`,
-    `L ${X(124)} 2`,
-    `C ${X(108 - p[0])} ${18 + p[1]}, ${X(55 - p[2])} ${28 - p[3]}, ${X(0)} 28`,
-    `C ${X(-55 + p[4])} ${26 - p[5]}, ${X(-92 + p[6])} ${18 + p[7]}, ${X(-104)} 14`,
-    `L ${X(-118)} 6`,
-    `Z`,
-  ].join(" ");
+function felineIrisPath(side: "left" | "right"): string {
+  return felineClipPath(side);
 }
 
 function buildKeyframes(side: "left" | "right", phase: number): string {
@@ -77,26 +69,27 @@ function buildKeyframes(side: "left" | "right", phase: number): string {
     const seed = (i + phase) * 11;
     const p = Array.from({ length: 8 }, (_, j) => {
       const angle = (seed + j * 1.3) * 0.7;
-      // Top control points (j < 4) jitter more than bottom — outline
-      // dances more toward the top, giving the eye a calm "alive" feel
-      // without overdoing motion.
-      const isTop = j < 4;
-      const amp = isTop ? 4 : 2;
-      return Math.sin(angle) * amp + Math.cos(angle * 2.1) * (amp * 0.5);
+      return Math.sin(angle) * 5 + Math.cos(angle * 2.1) * 3;
     });
-    return felineEyePathPerturbed(side, p);
+    return felineEyePath(side, p);
   });
   return frames.concat(frames[0]).join(";");
 }
 
-// Module-scope so the `<animate>` values attribute stays stable across
-// React re-renders (cursor + scroll changes won't restart the timeline).
-const OUTLINE_FRAMES = {
-  left: buildKeyframes("left", 0),
-  right: buildKeyframes("right", 0),
+const FLAME_FRAMES = {
+  outer: {
+    left: buildKeyframes("left", 0),
+    right: buildKeyframes("right", 0),
+  },
+  mid: {
+    left: buildKeyframes("left", 0.43),
+    right: buildKeyframes("right", 0.43),
+  },
 } as const;
 
 const SPLINES = "0.4 0 0.6 1; 0.4 0 0.6 1; 0.4 0 0.6 1; 0.4 0 0.6 1; 0.4 0 0.6 1; 0.4 0 0.6 1";
+
+// ─── Component ──────────────────────────────────────────────────────────────
 
 export function PredatorEyes() {
   const ref = useRef<HTMLDivElement>(null);
@@ -136,7 +129,7 @@ export function PredatorEyes() {
         width="100%"
         height="100%"
         preserveAspectRatio="xMidYMid meet"
-        style={{ display: "block" }}
+        style={{ display: "block", overflow: "visible" }}
       >
         <defs>
           <filter id="eye-glow" x="-60%" y="-60%" width="220%" height="220%">
@@ -157,8 +150,8 @@ export function PredatorEyes() {
           </linearGradient>
 
           <radialGradient id="eye-halo" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor="#06b6d4" stopOpacity="0.4" />
-            <stop offset="55%" stopColor="#06b6d4" stopOpacity="0.1" />
+            <stop offset="0%" stopColor="#06b6d4" stopOpacity="0.35" />
+            <stop offset="55%" stopColor="#06b6d4" stopOpacity="0.08" />
             <stop offset="100%" stopColor="#06b6d4" stopOpacity="0" />
           </radialGradient>
 
@@ -174,9 +167,11 @@ export function PredatorEyes() {
         <ellipse cx="220" cy="130" rx="200" ry="100" fill="url(#eye-halo)" />
         <ellipse cx="540" cy="130" rx="200" ry="100" fill="url(#eye-halo)" />
 
-        <EyeShape cx={220} side="left" />
-        <EyeShape cx={540} side="right" />
+        {/* Flame layers — memoized, never re-render on cursor/scroll */}
+        <FlameLayers cx={220} side="left" />
+        <FlameLayers cx={540} side="right" />
 
+        {/* Pupils — re-render freely on cursor/scroll */}
         <Pupil cx={220} side="left" px={px} py={py} />
         <Pupil cx={540} side="right" px={px} py={py} />
       </svg>
@@ -184,40 +179,123 @@ export function PredatorEyes() {
   );
 }
 
-const EyeShape = memo(function EyeShape({
+// ─── Memoized flame layers + embers (no cursor / scroll deps) ───────────────
+
+const FlameLayers = memo(function FlameLayers({
   cx,
   side,
 }: {
   cx: number;
   side: "left" | "right";
 }) {
-  const path = felineEyePath(side);
+  const basePath = felineEyePath(side);
   return (
     <g transform={`translate(${cx}, 130)`}>
-      {/* Sharp outline — d-attribute morphs between 6 perturbed
-          keyframes so the silhouette subtly waves. Module-scope
-          values string keeps the animation timeline stable across
-          React re-renders. */}
+      {/* Outer flame — morphs slowly through 6 keyframes */}
       <path
-        d={path}
-        fill="rgba(8,30,40,0.4)"
-        stroke="#06b6d4"
-        strokeWidth="1.8"
+        className="flame-flow-out"
+        d={basePath}
+        fill="none"
+        stroke="#67e8f9"
+        strokeWidth="2.6"
+        opacity="0.75"
       >
         <animate
           attributeName="d"
-          values={OUTLINE_FRAMES[side]}
-          dur="3.2s"
+          values={FLAME_FRAMES.outer[side]}
+          dur="2.4s"
           repeatCount="indefinite"
           calcMode="spline"
           keySplines={SPLINES}
         />
       </path>
-      {/* Iris fill — slightly inset path with vertical cyan gradient */}
-      <path d={felineClipPath(side)} fill="url(#iris-grad)" opacity="0.4" />
+
+      {/* Mid flame — independent fast morph (phase-shifted keyframes) */}
+      <path
+        className="flame-flow-mid"
+        d={basePath}
+        fill="none"
+        stroke="#06b6d4"
+        strokeWidth="1.8"
+        opacity="0.95"
+      >
+        <animate
+          attributeName="d"
+          values={FLAME_FRAMES.mid[side]}
+          dur="1.4s"
+          repeatCount="indefinite"
+          calcMode="spline"
+          keySplines={SPLINES}
+        />
+      </path>
+
+      {/* Sharp inner outline — undistorted, the "real" predator edge */}
+      <path
+        d={basePath}
+        fill="rgba(8,30,40,0.3)"
+        stroke="#06b6d4"
+        strokeWidth="1.2"
+      />
+
+      {/* Iris fill */}
+      <path d={felineIrisPath(side)} fill="url(#iris-grad)" opacity="0.32" />
+
+      {/* Embers — six rising particles per eye */}
+      <Embers side={side} />
     </g>
   );
 });
+
+const Embers = memo(function Embers({ side }: { side: "left" | "right" }) {
+  const flip = side === "left" ? -1 : 1;
+  const seeds = [
+    { x: -60 * flip, delay: 0,    dur: 2.4, riseHi: 60, riseFar: 84 },
+    { x: -10 * flip, delay: 0.4,  dur: 2.6, riseHi: 64, riseFar: 92 },
+    { x:  30 * flip, delay: 0.8,  dur: 2.2, riseHi: 58, riseFar: 78 },
+    { x:  70 * flip, delay: 1.2,  dur: 2.5, riseHi: 62, riseFar: 86 },
+    { x: 100 * flip, delay: 0.2,  dur: 2.3, riseHi: 56, riseFar: 80 },
+    { x: -90 * flip, delay: 1.6,  dur: 2.4, riseHi: 66, riseFar: 88 },
+  ];
+  return (
+    <g>
+      {seeds.map((s, i) => (
+        <ellipse
+          key={i}
+          cx={s.x}
+          cy={-38}
+          rx="2"
+          ry="3"
+          fill="#67e8f9"
+          opacity="0"
+        >
+          <animate
+            attributeName="cy"
+            values={`-38;-${s.riseHi};-${s.riseFar}`}
+            dur={`${s.dur}s`}
+            begin={`${s.delay}s`}
+            repeatCount="indefinite"
+          />
+          <animate
+            attributeName="opacity"
+            values="0;1;0"
+            dur={`${s.dur}s`}
+            begin={`${s.delay}s`}
+            repeatCount="indefinite"
+          />
+          <animate
+            attributeName="rx"
+            values="2;1.4;0.6"
+            dur={`${s.dur}s`}
+            begin={`${s.delay}s`}
+            repeatCount="indefinite"
+          />
+        </ellipse>
+      ))}
+    </g>
+  );
+});
+
+// ─── Pupil (re-renders on cursor / scroll) ──────────────────────────────────
 
 function Pupil({
   cx,

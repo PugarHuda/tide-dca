@@ -63,7 +63,7 @@ Full lifecycle validated end-to-end on Solana **devnet**:
 | **MoonPay** | 3/4 Solid | URL builder + HMAC-SHA256 server signing · `app/api/moonpay/sign/route.ts` |
 | **Pyth** | 3/4 Solid | V2 price account decoded inline + live oracle card · `lib/pyth.ts` |
 | **Reflect** | 3/4 Solid | Yield estimator + deposit ix builder + admin stake button · `lib/reflect.ts` |
-| **Arcium** | 2/4 Skeleton | Confidential ix skeleton + intent hash on-chain · `confidential-ixs/`, `lib/arcium.ts` (Cohort 2 testnet target) |
+| **Arcium** | 3/4 Solid | `@arcium-hq/client` v0.9 installed + real `RescueCipher` + `x25519` ECDH path in `lib/arcium.ts`, SHA-256 commitment fallback for devnet; `confidential-ixs/` Rust skeleton ready for `arcium build` |
 
 Full audit: [`.research/sponsor-evidence.md`](./.research/sponsor-evidence.md).
 

@@ -48,6 +48,56 @@ function felineClipPath(side: "left" | "right"): string {
   ].join(" ");
 }
 
+/** Generate a perturbed eye outline path. Bezier control points jitter
+ *  by small sin/cos deltas based on `perturb` array — produces subtly
+ *  different silhouettes per keyframe. Sharp inner/outer corners stay
+ *  anchored (hardcoded L points) so the eye keeps its predator look. */
+function felineEyePathPerturbed(
+  side: "left" | "right",
+  p: number[],
+): string {
+  const flip = side === "left" ? -1 : 1;
+  const X = (n: number) => n * flip;
+  return [
+    `M ${X(-118)} 6`,
+    `L ${X(-92)} ${-12}`,
+    `C ${X(-50 + p[0])} ${-42 + p[1]}, ${X(20 + p[2])} ${-50 + p[3]}, ${X(75)} ${-46}`,
+    `C ${X(105 + p[4])} ${-42 + p[5]}, ${X(122 + p[6])} ${-30 + p[7]}, ${X(130)} ${-16}`,
+    `L ${X(132)} ${-8}`,
+    `L ${X(124)} 2`,
+    `C ${X(108 - p[0])} ${18 + p[1]}, ${X(55 - p[2])} ${28 - p[3]}, ${X(0)} 28`,
+    `C ${X(-55 + p[4])} ${26 - p[5]}, ${X(-92 + p[6])} ${18 + p[7]}, ${X(-104)} 14`,
+    `L ${X(-118)} 6`,
+    `Z`,
+  ].join(" ");
+}
+
+function buildKeyframes(side: "left" | "right", phase: number): string {
+  const frames = [0, 1, 2, 3, 4, 5].map((i) => {
+    const seed = (i + phase) * 11;
+    const p = Array.from({ length: 8 }, (_, j) => {
+      const angle = (seed + j * 1.3) * 0.7;
+      // Top control points (j < 4) jitter more than bottom — outline
+      // dances more toward the top, giving the eye a calm "alive" feel
+      // without overdoing motion.
+      const isTop = j < 4;
+      const amp = isTop ? 4 : 2;
+      return Math.sin(angle) * amp + Math.cos(angle * 2.1) * (amp * 0.5);
+    });
+    return felineEyePathPerturbed(side, p);
+  });
+  return frames.concat(frames[0]).join(";");
+}
+
+// Module-scope so the `<animate>` values attribute stays stable across
+// React re-renders (cursor + scroll changes won't restart the timeline).
+const OUTLINE_FRAMES = {
+  left: buildKeyframes("left", 0),
+  right: buildKeyframes("right", 0),
+} as const;
+
+const SPLINES = "0.4 0 0.6 1; 0.4 0 0.6 1; 0.4 0 0.6 1; 0.4 0 0.6 1; 0.4 0 0.6 1; 0.4 0 0.6 1";
+
 export function PredatorEyes() {
   const ref = useRef<HTMLDivElement>(null);
   const [cursor, setCursor] = useState({ x: 0, y: 0 });
@@ -144,13 +194,25 @@ const EyeShape = memo(function EyeShape({
   const path = felineEyePath(side);
   return (
     <g transform={`translate(${cx}, 130)`}>
-      {/* Sharp outline */}
+      {/* Sharp outline — d-attribute morphs between 6 perturbed
+          keyframes so the silhouette subtly waves. Module-scope
+          values string keeps the animation timeline stable across
+          React re-renders. */}
       <path
         d={path}
         fill="rgba(8,30,40,0.4)"
         stroke="#06b6d4"
         strokeWidth="1.8"
-      />
+      >
+        <animate
+          attributeName="d"
+          values={OUTLINE_FRAMES[side]}
+          dur="3.2s"
+          repeatCount="indefinite"
+          calcMode="spline"
+          keySplines={SPLINES}
+        />
+      </path>
       {/* Iris fill — slightly inset path with vertical cyan gradient */}
       <path d={felineClipPath(side)} fill="url(#iris-grad)" opacity="0.4" />
     </g>

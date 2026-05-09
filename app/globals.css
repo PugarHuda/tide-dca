@@ -1596,45 +1596,65 @@ textarea {
   50%      { transform: scale(1.015); opacity: 1; }
 }
 
-/* Flame outline strokes — stroke-dashoffset makes the dash pattern
-   march around the silhouette + transform pulse adds layered scale
-   shimmer. Both GPU-accelerated, never suppressed by browser caching. */
-.flame-flow-out {
-  stroke-dasharray: 26 18;
-  animation:
-    fire-march 2.2s linear infinite,
-    fire-pulse-out 1.3s ease-in-out infinite;
-  transform-origin: center;
-  transform-box: fill-box;
+/* Six independent flame stroke layers — each has its own dash pattern
+   + dashoffset march speed + transform pulse so the layers dance at
+   different rhythms. Together they read as a halo of ripples around
+   the eye silhouette. GPU-accelerated, never suppressed. */
+.flame-dash-1 {
+  stroke-dasharray: 32 22;
+  animation: fire-march 3.4s linear infinite, fire-pulse-a 2.2s ease-in-out infinite;
+  transform-origin: center; transform-box: fill-box;
 }
-.flame-flow-mid {
-  stroke-dasharray: 14 10;
-  animation:
-    fire-march 1.1s linear infinite reverse,
-    fire-pulse-mid 0.9s ease-in-out infinite;
-  transform-origin: center;
-  transform-box: fill-box;
+.flame-dash-2 {
+  stroke-dasharray: 24 18;
+  animation: fire-march 2.7s linear infinite reverse, fire-pulse-b 1.7s ease-in-out infinite;
+  transform-origin: center; transform-box: fill-box;
+}
+.flame-dash-3 {
+  stroke-dasharray: 20 14;
+  animation: fire-march 2.1s linear infinite, fire-pulse-c 1.4s ease-in-out infinite;
+  transform-origin: center; transform-box: fill-box;
+}
+.flame-dash-4 {
+  stroke-dasharray: 16 10;
+  animation: fire-march 1.5s linear infinite reverse, fire-pulse-a 1.1s ease-in-out infinite;
+  transform-origin: center; transform-box: fill-box;
+}
+.flame-dash-5 {
+  stroke-dasharray: 11 7;
+  animation: fire-march 1.0s linear infinite, fire-pulse-b 0.85s ease-in-out infinite;
+  transform-origin: center; transform-box: fill-box;
+}
+.flame-dash-6 {
+  stroke-dasharray: 7 5;
+  animation: fire-march 0.7s linear infinite reverse, fire-pulse-c 0.65s ease-in-out infinite;
+  transform-origin: center; transform-box: fill-box;
 }
 @keyframes fire-march {
   from { stroke-dashoffset: 0; }
-  to   { stroke-dashoffset: -44; }
+  to   { stroke-dashoffset: -54; }
 }
-@keyframes fire-pulse-out {
+@keyframes fire-pulse-a {
   0%, 100% { transform: scale(1, 1) skewX(0deg); }
-  25%      { transform: scale(1.04, 0.96) skewX(0.6deg); }
-  50%      { transform: scale(0.98, 1.05) skewX(-0.4deg); }
-  75%      { transform: scale(1.03, 0.98) skewX(0.3deg); }
+  25%      { transform: scale(1.05, 0.95) skewX(0.7deg); }
+  50%      { transform: scale(0.97, 1.06) skewX(-0.5deg); }
+  75%      { transform: scale(1.03, 0.98) skewX(0.4deg); }
 }
-@keyframes fire-pulse-mid {
+@keyframes fire-pulse-b {
   0%, 100% { transform: scale(1, 1) skewX(0deg); }
-  33%      { transform: scale(0.96, 1.04) skewX(-0.5deg); }
-  66%      { transform: scale(1.05, 0.97) skewX(0.7deg); }
+  33%      { transform: scale(0.96, 1.05) skewX(-0.6deg); }
+  66%      { transform: scale(1.06, 0.97) skewX(0.8deg); }
+}
+@keyframes fire-pulse-c {
+  0%, 100% { transform: scale(1, 1) skewX(0deg); }
+  20%      { transform: scale(1.04, 0.97) skewX(0.5deg); }
+  50%      { transform: scale(0.98, 1.03) skewX(-0.3deg); }
+  80%      { transform: scale(1.02, 0.99) skewX(0.6deg); }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .eyes { animation: none; }
-  .flame-flow-out,
-  .flame-flow-mid {
+  [class^="flame-dash-"] {
     animation: none;
     stroke-dasharray: none;
     transform: none;

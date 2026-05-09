@@ -76,16 +76,15 @@ function buildKeyframes(side: "left" | "right", phase: number): string {
   return frames.concat(frames[0]).join(";");
 }
 
-const FLAME_FRAMES = {
-  outer: {
-    left: buildKeyframes("left", 0),
-    right: buildKeyframes("right", 0),
-  },
-  mid: {
-    left: buildKeyframes("left", 0.43),
-    right: buildKeyframes("right", 0.43),
-  },
-} as const;
+// Six independent phase offsets so the layers don't ripple in lockstep —
+// each layer dances on its own pseudo-random schedule. Phases chosen
+// from sqrt(2)/sqrt(3)/sqrt(5)/etc family so they never re-align.
+const FLAME_PHASES = [0, 0.27, 0.51, 0.78, 1.13, 1.41] as const;
+
+const FLAME_FRAMES = FLAME_PHASES.map((phase) => ({
+  left: buildKeyframes("left", phase),
+  right: buildKeyframes("right", phase),
+}));
 
 const SPLINES = "0.4 0 0.6 1; 0.4 0 0.6 1; 0.4 0 0.6 1; 0.4 0 0.6 1; 0.4 0 0.6 1; 0.4 0 0.6 1";
 
@@ -181,6 +180,18 @@ export function PredatorEyes() {
 
 // ─── Memoized flame layers + embers (no cursor / scroll deps) ───────────────
 
+/** Six stacked flame outline layers, each morphing at its own phase
+ *  + speed + width + opacity. Together they read as a halo of ripples
+ *  dancing around the eye silhouette — many outlines, all moving. */
+const FLAME_LAYER_CONFIGS = [
+  { phase: 0,    width: 4.4, color: "#a5f3fc", opacity: 0.28, dur: "3.0s",  dashClass: "flame-dash-1" },
+  { phase: 0.27, width: 3.6, color: "#67e8f9", opacity: 0.4,  dur: "2.6s",  dashClass: "flame-dash-2" },
+  { phase: 0.51, width: 2.8, color: "#22d3ee", opacity: 0.55, dur: "2.0s",  dashClass: "flame-dash-3" },
+  { phase: 0.78, width: 2.2, color: "#06b6d4", opacity: 0.75, dur: "1.6s",  dashClass: "flame-dash-4" },
+  { phase: 1.13, width: 1.6, color: "#0ea5b7", opacity: 0.9,  dur: "1.25s", dashClass: "flame-dash-5" },
+  { phase: 1.41, width: 1.0, color: "#67e8f9", opacity: 1,    dur: "0.9s",  dashClass: "flame-dash-6" },
+] as const;
+
 const FlameLayers = memo(function FlameLayers({
   cx,
   side,
@@ -191,43 +202,29 @@ const FlameLayers = memo(function FlameLayers({
   const basePath = felineEyePath(side);
   return (
     <g transform={`translate(${cx}, 130)`}>
-      {/* Outer flame — morphs slowly through 6 keyframes */}
-      <path
-        className="flame-flow-out"
-        d={basePath}
-        fill="none"
-        stroke="#67e8f9"
-        strokeWidth="2.6"
-        opacity="0.75"
-      >
-        <animate
-          attributeName="d"
-          values={FLAME_FRAMES.outer[side]}
-          dur="2.4s"
-          repeatCount="indefinite"
-          calcMode="spline"
-          keySplines={SPLINES}
-        />
-      </path>
-
-      {/* Mid flame — independent fast morph (phase-shifted keyframes) */}
-      <path
-        className="flame-flow-mid"
-        d={basePath}
-        fill="none"
-        stroke="#06b6d4"
-        strokeWidth="1.8"
-        opacity="0.95"
-      >
-        <animate
-          attributeName="d"
-          values={FLAME_FRAMES.mid[side]}
-          dur="1.4s"
-          repeatCount="indefinite"
-          calcMode="spline"
-          keySplines={SPLINES}
-        />
-      </path>
+      {/* Stack of 6 morphing outlines — different phase + speed +
+          width + opacity each, so they ripple independently and read
+          as a fire halo around the eye silhouette. */}
+      {FLAME_LAYER_CONFIGS.map((cfg, i) => (
+        <path
+          key={i}
+          className={cfg.dashClass}
+          d={basePath}
+          fill="none"
+          stroke={cfg.color}
+          strokeWidth={cfg.width}
+          opacity={cfg.opacity}
+        >
+          <animate
+            attributeName="d"
+            values={FLAME_FRAMES[i][side]}
+            dur={cfg.dur}
+            repeatCount="indefinite"
+            calcMode="spline"
+            keySplines={SPLINES}
+          />
+        </path>
+      ))}
 
       {/* Sharp inner outline — undistorted, the "real" predator edge */}
       <path

@@ -1658,6 +1658,25 @@ textarea {
   will-change: transform;
 }
 
+/* Eye blink — vertical squish on the inner content of each eye every
+   ~6.4s. transform-origin set in SVG user-space (0, -9) which is the
+   approximate vertical midline of the cat-eye outline (top reaches
+   y=-47, bottom y=28, midline ≈ -9). Same animation timing on both
+   FlameLayers + Pupil so the eye contents close in sync. */
+.eye-blink {
+  transform-origin: 0 -9px;
+  transform-box: fill-box;
+  animation: eye-blink 6.4s ease-in-out infinite;
+}
+@keyframes eye-blink {
+  0%, 92%, 100% { transform: scaleY(1); }
+  94%           { transform: scaleY(0.04); }
+  96%           { transform: scaleY(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .eye-blink { animation: none; transform: none; }
+}
+
 /* Mobile — drop the two widest, slowest flame layers (the largest
    GPU surfaces) to keep low-end devices smooth. The remaining 4
    layers still ripple visibly. */

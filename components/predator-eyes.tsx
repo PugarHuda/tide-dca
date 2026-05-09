@@ -240,6 +240,7 @@ const FlameLayers = memo(function FlameLayers({
   const basePath = felineEyePath(side);
   return (
     <g transform={`translate(${cx}, 130)`}>
+     <g className="eye-blink">
       {/* Stack of 6 morphing outlines — different phase + speed +
           width + opacity each, so they ripple independently and read
           as a fire halo around the eye silhouette. */}
@@ -277,6 +278,7 @@ const FlameLayers = memo(function FlameLayers({
 
       {/* Embers — six rising particles per eye */}
       <Embers side={side} />
+     </g>
     </g>
   );
 });
@@ -345,6 +347,7 @@ function Pupil({
 }) {
   return (
     <g transform={`translate(${cx}, 130)`}>
+     <g className="eye-blink">
       <g clipPath={`url(#clip-eye-${side})`}>
         <g transform={`translate(${px}, ${py})`}>
           <ellipse
@@ -372,6 +375,7 @@ function Pupil({
           />
         </g>
       </g>
+     </g>
     </g>
   );
 }

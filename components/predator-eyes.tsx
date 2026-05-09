@@ -108,15 +108,19 @@ export function PredatorEyes() {
     } | null = null;
     const flush = () => {
       rafId = 0;
-      if (pending) {
-        setCursor(pending.cursor);
-        setHovered((prev) =>
-          prev.left === pending!.hovered.left && prev.right === pending!.hovered.right
-            ? prev
-            : pending!.hovered,
-        );
-      }
+      if (!pending) return;
+      // Snapshot before nulling — React's updater callback runs during
+      // the next commit phase, which can be after `pending = null`.
+      // Without snapshot, the closure reads pending.hovered after it's
+      // null and crashes with "Cannot read properties of null".
+      const next = pending;
       pending = null;
+      setCursor(next.cursor);
+      setHovered((prev) =>
+        prev.left === next.hovered.left && prev.right === next.hovered.right
+          ? prev
+          : next.hovered,
+      );
     };
     const onMove = (e: MouseEvent) => {
       if (!ref.current) return;

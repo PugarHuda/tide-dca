@@ -33,14 +33,20 @@ export type MoonPayParams = {
 const MOONPAY_BUY_URL = "https://buy.moonpay.com";
 const MOONPAY_SANDBOX_URL = "https://buy-sandbox.moonpay.com";
 
-/** Returns a fully-formed MoonPay onramp URL. Sandbox if no real key. */
-export function buildMoonPayUrl(params: MoonPayParams): string {
+/** Returns a fully-formed MoonPay onramp URL. Returns null if no API
+ *  key is configured — caller should surface a "configuration pending"
+ *  state instead of opening a broken MoonPay page (the previous
+ *  fallback to "pk_test_demo" was rejected by MoonPay's API with a 401,
+ *  causing CORS failures and a broken UI). */
+export function buildMoonPayUrl(params: MoonPayParams): string | null {
   const apiKey = process.env.NEXT_PUBLIC_MOONPAY_API_KEY ?? "";
-  const isSandbox = !apiKey || apiKey.startsWith("pk_test_");
+  if (!apiKey) return null;
+
+  const isSandbox = apiKey.startsWith("pk_test_");
   const base = isSandbox ? MOONPAY_SANDBOX_URL : MOONPAY_BUY_URL;
 
   const search = new URLSearchParams({
-    apiKey: apiKey || "pk_test_demo",
+    apiKey,
     currencyCode: "usdc_sol",
     walletAddress: params.walletAddress,
     baseCurrencyCode: "usd",

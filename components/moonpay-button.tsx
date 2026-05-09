@@ -3,19 +3,18 @@
 import { useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 
-import { buildMoonPayUrl } from "@/lib/moonpay";
+import { useToast } from "@/components/toast";
 
 /**
- * "Top up via MoonPay" button. Opens MoonPay's hosted onramp in a new
- * tab pre-filled with the connected wallet as recipient. Disabled
- * if no wallet is connected.
+ * "Top up via MoonPay" button. Opens MoonPay's hosted onramp in a
+ * new tab pre-filled with the connected wallet as recipient.
  *
  * Flow:
  *   1. POST to /api/moonpay/sign with wallet + amount → server signs
  *      with HMAC-SHA256 + MOONPAY_SECRET_KEY, returns secure URL
- *   2. If server signing unavailable (no secret), client falls back to
- *      sandbox URL (capped at $100/tx). Either way, button works.
- *   3. window.open the returned URL in a new tab.
+ *   2. If endpoint returns 503 (no API key configured) → surface a
+ *      toast explaining production gating, don't open broken page
+ *   3. Otherwise window.open the returned URL in a new tab
  */
 export function MoonPayButton({
   amount,
@@ -27,6 +26,7 @@ export function MoonPayButton({
   className?: string;
 }) {
   const { publicKey } = useWallet();
+  const toast = useToast();
   const [busy, setBusy] = useState(false);
 
   const onClick = async () => {
@@ -37,7 +37,6 @@ export function MoonPayButton({
         ? `${window.location.origin}/dashboard`
         : undefined;
 
-    let urlToOpen: string;
     try {
       const res = await fetch("/api/moonpay/sign", {
         method: "POST",
@@ -48,26 +47,23 @@ export function MoonPayButton({
           redirectURL,
         }),
       });
-      if (res.ok) {
-        const json = (await res.json()) as { url: string; signed: boolean };
-        urlToOpen = json.url;
-      } else {
-        urlToOpen = buildMoonPayUrl({
-          walletAddress: publicKey.toBase58(),
-          baseCurrencyAmount: amount,
-          redirectURL,
-        });
+      if (res.status === 503) {
+        toast.info(
+          "MoonPay onramp button is wired (URL builder + HMAC server signing) but production API key isn't set on this deployment. Mainnet launch flips one env var.",
+        );
+        return;
       }
-    } catch {
-      urlToOpen = buildMoonPayUrl({
-        walletAddress: publicKey.toBase58(),
-        baseCurrencyAmount: amount,
-        redirectURL,
-      });
+      if (!res.ok) {
+        toast.error(`MoonPay sign endpoint returned ${res.status}`);
+        return;
+      }
+      const json = (await res.json()) as { url: string; signed: boolean };
+      window.open(json.url, "_blank", "noopener,noreferrer");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
     }
-    window.open(urlToOpen, "_blank", "noopener,noreferrer");
   };
 
   const cls = [

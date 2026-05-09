@@ -63,9 +63,20 @@ export async function POST(req: Request) {
     redirectURL: body.redirectURL,
   });
 
-  // Sandbox flow: secret may be absent during early dev. Returning the
-  // unsigned URL keeps the button working — caller still gets a usable
-  // sandbox onramp, just capped at $100.
+  // No API key configured — return 503 so the client can surface a
+  // "MoonPay not configured" state instead of opening a broken page.
+  if (!url) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "MoonPay API key not configured for this deployment",
+        configured: false,
+      },
+      { status: 503 },
+    );
+  }
+
+  // API key set but no secret — return unsigned URL for sandbox dev.
   if (!secret) {
     return NextResponse.json({ url, signed: false });
   }

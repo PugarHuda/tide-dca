@@ -1652,12 +1652,29 @@ textarea {
   80%      { transform: scale(1.02, 0.99) skewX(0.6deg); }
 }
 
+/* Performance hints — promote flame paths to GPU layers so the
+   transform animations don't trigger layout/paint on every frame. */
+[class^="flame-dash-"] {
+  will-change: transform;
+}
+
+/* Mobile — drop the two widest, slowest flame layers (the largest
+   GPU surfaces) to keep low-end devices smooth. The remaining 4
+   layers still ripple visibly. */
+@media (max-width: 600px) {
+  .flame-dash-1,
+  .flame-dash-2 {
+    display: none;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .eyes { animation: none; }
   [class^="flame-dash-"] {
     animation: none;
     stroke-dasharray: none;
     transform: none;
+    will-change: auto;
   }
 }
 @media (max-width: 600px) {

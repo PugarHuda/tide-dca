@@ -95,26 +95,64 @@ export function PredatorEyes() {
   const [cursor, setCursor] = useState({ x: 0, y: 0 });
   const [scrollY, setScrollY] = useState(0);
 
+  // Cursor tracking — throttled with requestAnimationFrame so React
+  // doesn't re-render on every pixel of mouse motion. State only
+  // updates ~once per frame (60fps cap), keeping the cursor-chase
+  // smooth without thrashing the rendering pipeline.
   useEffect(() => {
+    let rafId = 0;
+    let pending: { x: number; y: number } | null = null;
+    const flush = () => {
+      rafId = 0;
+      if (pending) setCursor(pending);
+      pending = null;
+    };
     const onMove = (e: MouseEvent) => {
       if (!ref.current) return;
       const rect = ref.current.getBoundingClientRect();
       const cx = e.clientX - (rect.left + rect.width / 2);
       const cy = e.clientY - (rect.top + rect.height / 2);
-      setCursor({
+      pending = {
         x: Math.max(-1, Math.min(1, cx / 500)),
         y: Math.max(-1, Math.min(1, cy / 350)),
-      });
+      };
+      if (!rafId) rafId = requestAnimationFrame(flush);
+    };
+    // Touch tracking — same handler shape for mobile devices, reads
+    // first touch point so the pupils still chase the user's finger.
+    const onTouch = (e: TouchEvent) => {
+      const t = e.touches[0];
+      if (t) onMove({ clientX: t.clientX, clientY: t.clientY } as MouseEvent);
     };
     window.addEventListener("mousemove", onMove);
-    return () => window.removeEventListener("mousemove", onMove);
+    window.addEventListener("touchmove", onTouch, { passive: true });
+    return () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("touchmove", onTouch);
+    };
   }, []);
 
+  // Scroll listener — also throttled via rAF so dense scroll events
+  // don't churn React state.
   useEffect(() => {
-    const onScroll = () => setScrollY(window.scrollY);
+    let rafId = 0;
+    let pending: number | null = null;
+    const flush = () => {
+      rafId = 0;
+      if (pending !== null) setScrollY(pending);
+      pending = null;
+    };
+    const onScroll = () => {
+      pending = window.scrollY;
+      if (!rafId) rafId = requestAnimationFrame(flush);
+    };
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
+    return () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      window.removeEventListener("scroll", onScroll);
+    };
   }, []);
 
   const scrollNorm = Math.min(1, scrollY / 1200);

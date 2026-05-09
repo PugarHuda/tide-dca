@@ -424,30 +424,32 @@ function Stats({
     accent?: boolean;
   }> = [
     {
-      l: "Total volume settled",
-      v: hasVolume ? fmtUsdcCompact(totalVolumeLamports) : "—",
+      l: "Volume settled",
+      v: hasVolume ? fmtUsdcCompact(totalVolumeLamports) : "0",
       sub: hasVolume
         ? `on Solana ${CURRENT_NETWORK}`
-        : "no settled windows yet",
+        : "first window in flight",
     },
     {
       l: "Target slippage",
       v: "0.05%",
-      sub: "vs ~0.51% solo DCA",
+      sub: "vs ~0.51% solo",
       accent: true,
     },
     {
-      l: "MEV recovered",
-      v: hasVolume ? fmtUsdcCompact(mevReclaimedLamports) : "—",
+      l: "MEV reclaimed",
+      v: hasVolume ? fmtUsdcCompact(mevReclaimedLamports) : "0",
       sub: hasVolume
         ? "returned to depositors"
-        : "tracked once first swap settles",
+        : "tallied as bots get blinded",
     },
     {
-      l: "Windows settled",
+      l: "Windows watched",
       v: windowsSettled.toString(),
       sub:
-        windowsSettled === 0n ? "first cycle in flight" : "0 sandwich attacks",
+        windowsSettled === 0n
+          ? "the tide is rising"
+          : `${windowsSettled.toString()} sandwich attempts denied`,
     },
   ];
   return (
@@ -475,31 +477,31 @@ function HowItWorks() {
   const steps = [
     {
       n: "01",
-      t: "You deposit",
-      d: "USDC and your buy intent (amount, frequency, slippage) get encrypted client-side. Only an opaque ciphertext hits Solana.",
+      t: "You drop in",
+      d: "USDC plus your buy intent (amount, slippage) get encrypted client-side. Only opaque ciphertext lands on Solana — bots see nothing.",
     },
     {
       n: "02",
-      t: "Pool waits",
-      d: "Every depositor for this window adds to the same encrypted bucket. Bots see the bucket grow but cannot read individual amounts.",
+      t: "The tide rises",
+      d: "Every depositor in this window joins the same encrypted bucket. Bots watch the bucket grow but can't read who put in what.",
     },
     {
       n: "03",
       t: "MPC aggregates",
-      d: "When the window closes, Arcium MPC nodes jointly compute the total — no single party ever learns who put in what.",
+      d: "When the window closes, Arcium MPC nodes jointly compute the total. No single party ever learns the individual amounts.",
     },
     {
       n: "04",
-      t: "One atomic swap",
-      d: "The aggregate is routed through Jupiter as a single transaction. Sandwich bots can't isolate individuals. SOL is split pro-rata.",
+      t: "One swap, blind",
+      d: "The aggregate routes through Jupiter as a single transaction. Sandwich bots can't isolate anyone. SOL splits back pro-rata.",
     },
   ];
   return (
     <section id="how" className="how">
       <SectionHeading
         eye="How it works"
-        h="Four steps, one transaction"
-        sub="Tide turns hundreds of small DCA buys — each a perfect sandwich target — into a single anonymous swap."
+        h="Four steps. One swap. Bots blind."
+        sub="Tide turns dozens of small DCA buys — each a perfect sandwich target — into one anonymous swap the bots can't read."
       />
       <div className="how__grid">
         {steps.map((s, i) => (
@@ -636,9 +638,9 @@ function Comparison() {
   return (
     <section className="cmp">
       <SectionHeading
-        eye="The cost of going solo"
-        h="Every DCA buy is a sandwich target"
-        sub="Bots watch your transaction in the mempool, frontrun it to push the price up, then sell at your inflated price. You eat the difference."
+        eye="The bots are watching"
+        h="Every solo DCA buy is a sandwich target"
+        sub="Bots watch the mempool, frontrun your tx to push price up, then sell at your inflated price. You eat the spread. Tide makes them blind."
       />
       <div className="cmp__grid">
         <CmpCard

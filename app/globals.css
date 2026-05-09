@@ -1583,32 +1583,19 @@ textarea {
   -webkit-mask-image: radial-gradient(ellipse 65% 45% at center, #000 35%, transparent 82%);
   mask-image: radial-gradient(ellipse 65% 45% at center, #000 35%, transparent 82%);
 }
-/* Canvas + SVG hybrid eyes wrapper. Canvas behind paints the fire
-   particle system; SVG on top renders sharp outline + iris + pupil. */
+/* Predator eyes wrapper — clean cat-eye SVG, viewport-fixed via the
+   .landing-eyes-fixed parent. Subtle breathing pulse + cyan halo via
+   drop-shadow gives atmospheric depth without competing with the
+   landing copy. */
 .eyes {
-  position: relative;
   width: min(92vw, 880px);
   aspect-ratio: 760 / 260;
   animation: eyes-breathe 7s ease-in-out infinite;
-  filter: drop-shadow(0 0 24px rgba(6, 182, 212, 0.18));
-}
-.eyes-canvas {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-}
-.eyes-svg {
-  position: relative;
-  display: block;
-  width: 100%;
-  height: 100%;
-  z-index: 1;
+  filter: drop-shadow(0 0 28px rgba(6, 182, 212, 0.28));
 }
 @keyframes eyes-breathe {
   0%, 100% { transform: scale(1); opacity: 0.95; }
-  50%      { transform: scale(1.012); opacity: 1; }
+  50%      { transform: scale(1.015); opacity: 1; }
 }
 @media (prefers-reduced-motion: reduce) {
   .eyes { animation: none; }

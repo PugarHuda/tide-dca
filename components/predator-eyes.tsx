@@ -239,8 +239,15 @@ const FlameLayers = memo(function FlameLayers({
 }) {
   const basePath = felineEyePath(side);
   return (
-    <g transform={`translate(${cx}, 130)`}>
-     <g className="eye-blink">
+    // Outer translate moves origin to (cx, 121), which is the eye's
+    // VERTICAL MIDLINE in viewBox coords (eye top y=-47, bottom y=28
+    // → midline y=-9.5 in local; → viewBox 130 + -9 ≈ 121). The
+    // animateTransform scale composes with this translate + scales
+    // around (0, 0) of this group, which is now the eye middle —
+    // squish hinges correctly.
+    <g transform={`translate(${cx}, 121)`}>
+      <BlinkAnimate />
+     <g transform="translate(0, 9)">
       {/* Stack of 6 morphing outlines — different phase + speed +
           width + opacity each, so they ripple independently and read
           as a fire halo around the eye silhouette. */}
@@ -282,6 +289,24 @@ const FlameLayers = memo(function FlameLayers({
     </g>
   );
 });
+
+/** Periodic blink — SMIL animateTransform with type="scale" composes
+ *  with the parent <g>'s translate via additive="sum". Scale center
+ *  is (0, 0) of the parent's local coord, which we positioned at the
+ *  eye's vertical midline. */
+function BlinkAnimate() {
+  return (
+    <animateTransform
+      attributeName="transform"
+      type="scale"
+      additive="sum"
+      values="1 1; 1 1; 1 0.04; 1 0.04; 1 1; 1 1"
+      keyTimes="0; 0.92; 0.94; 0.95; 0.97; 1"
+      dur="6.4s"
+      repeatCount="indefinite"
+    />
+  );
+}
 
 const Embers = memo(function Embers({ side }: { side: "left" | "right" }) {
   const flip = side === "left" ? -1 : 1;
@@ -346,8 +371,11 @@ function Pupil({
   py: number;
 }) {
   return (
-    <g transform={`translate(${cx}, 130)`}>
-     <g className="eye-blink">
+    // Same shifted-translate trick as FlameLayers so blink scale
+    // hinges on the eye's vertical midline.
+    <g transform={`translate(${cx}, 121)`}>
+      <BlinkAnimate />
+     <g transform="translate(0, 9)">
       <g clipPath={`url(#clip-eye-${side})`}>
         <g transform={`translate(${px}, ${py})`}>
           <ellipse

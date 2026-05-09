@@ -1583,63 +1583,35 @@ textarea {
   -webkit-mask-image: radial-gradient(ellipse 65% 45% at center, #000 35%, transparent 82%);
   mask-image: radial-gradient(ellipse 65% 45% at center, #000 35%, transparent 82%);
 }
+/* Canvas + SVG hybrid eyes wrapper. Canvas behind paints the fire
+   particle system; SVG on top renders sharp outline + iris + pupil. */
 .eyes {
+  position: relative;
   width: min(92vw, 880px);
   aspect-ratio: 760 / 260;
   animation: eyes-breathe 7s ease-in-out infinite;
-  filter: drop-shadow(0 0 36px rgba(6, 182, 212, 0.32));
+  filter: drop-shadow(0 0 24px rgba(6, 182, 212, 0.18));
+}
+.eyes-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.eyes-svg {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
 }
 @keyframes eyes-breathe {
   0%, 100% { transform: scale(1); opacity: 0.95; }
-  50%      { transform: scale(1.015); opacity: 1; }
+  50%      { transform: scale(1.012); opacity: 1; }
 }
-
-/* Fire-flow — STACKED CSS animations on each flame stroke layer:
-   - stroke-dashoffset makes the dash pattern run around the silhouette
-   - transform: scale + skew pulses each layer slightly off-center so
-     the layers shift relative to each other
-   Both are GPU-accelerated and never suppressed by browser filter
-   caching, so flame motion is guaranteed visible. */
-.flame-flow-out {
-  stroke-dasharray: 26 18;
-  animation:
-    fire-march 2.2s linear infinite,
-    fire-pulse-out 1.3s ease-in-out infinite;
-  transform-origin: center;
-  transform-box: fill-box;
-}
-.flame-flow-mid {
-  stroke-dasharray: 14 10;
-  animation:
-    fire-march 1.1s linear infinite reverse,
-    fire-pulse-mid 0.9s ease-in-out infinite;
-  transform-origin: center;
-  transform-box: fill-box;
-}
-@keyframes fire-march {
-  from { stroke-dashoffset: 0; }
-  to   { stroke-dashoffset: -44; }
-}
-@keyframes fire-pulse-out {
-  0%, 100% { transform: scale(1, 1) skewX(0deg); }
-  25%      { transform: scale(1.04, 0.96) skewX(0.6deg); }
-  50%      { transform: scale(0.98, 1.05) skewX(-0.4deg); }
-  75%      { transform: scale(1.03, 0.98) skewX(0.3deg); }
-}
-@keyframes fire-pulse-mid {
-  0%, 100% { transform: scale(1, 1) skewX(0deg); }
-  33%      { transform: scale(0.96, 1.04) skewX(-0.5deg); }
-  66%      { transform: scale(1.05, 0.97) skewX(0.7deg); }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .eyes { animation: none; }
-  .flame-flow-out,
-  .flame-flow-mid {
-    animation: none;
-    stroke-dasharray: none;
-    transform: none;
-  }
 }
 @media (max-width: 600px) {
   .eyes { width: 96vw; }

@@ -3,49 +3,43 @@
 import { memo, useEffect, useRef, useState } from "react";
 
 /**
- * Animated feline predator eyes with flame outlines.
+ * Fire eyes — hybrid canvas + SVG.
  *
- * Architecture (rewritten — earlier versions had a subtle bug where
- * keyframe computation lived INSIDE the component function. Each
- * cursor or scroll event re-rendered the component, which regenerated
- * the SMIL animate `values` attribute, which made the browser restart
- * the animation from frame 0 — manifesting as visually static eyes.):
+ * Canvas (behind): particle system that emits from points along each
+ * eye outline. Particles rise upward + drift outward, fade over their
+ * lifetime, render with additive blending so overlapping particles
+ * brighten — the classic technique for realistic fire on web. Reads as
+ * actual flame licking off the outline, not a stylized triangle.
  *
- *   - All flame keyframes pre-computed at MODULE scope. They're
- *     stable across re-renders.
- *   - <FlameLayers /> is React.memo'd and takes no props that change
- *     during user interaction. SMIL animations run uninterrupted.
- *   - Pupil tracking lives in a separate inner component that is
- *     allowed to re-render freely.
+ * SVG (on top): sharp cat-eye outline + iris + cursor-tracking pupil.
+ * The outline stays crisp and predator-shaped; the canvas fills in the
+ * fire energy around and rising from it.
  *
- * Animation sources (stacked for visibility across browsers):
- *   1. SVG <animate> on path d → silhouette morphs through 6 keyframes
- *   2. SVG <animate> on stroke-dashoffset → dash pattern runs
- *   3. CSS @keyframes on transform → scale + skew pulse
- *   4. SVG <animate> on ember ovals → upward rise with fade
+ * Why this combination instead of pure SVG: SVG primitives (paths,
+ * filters, animated d-attribute) can stylize but cannot do organic
+ * particle motion at the density needed to read as real fire. Canvas
+ * 2D with `globalCompositeOperation: "lighter"` is the standard
+ * approach and is GPU-accelerated in modern browsers.
  *
- * No more dependency on feTurbulence animation — that filter was
- * caching itself across browsers and never re-evaluating.
+ * Refs informing this approach:
+ *   - thecodeplayer.com/walkthrough/html5-canvas-experiment-a-cool-flame-fire-effect-using-particles
+ *   - davepagurek.com/blog/fire-particles-for-html5-canvas
  */
 
-// ─── Module-level path generators ───────────────────────────────────────────
+// ─── Geometry: cat-eye outline path (shared with SVG render) ────────────────
 
-function felineEyePath(
-  side: "left" | "right",
-  perturb: number[] = new Array(8).fill(0),
-): string {
+function felineEyePath(side: "left" | "right"): string {
   const flip = side === "left" ? -1 : 1;
   const X = (n: number) => n * flip;
-  const p = perturb;
   return [
     `M ${X(-118)} 6`,
     `L ${X(-92)} ${-12}`,
-    `C ${X(-50 + p[0])} ${-42 + p[1]}, ${X(20 + p[2])} ${-50 + p[3]}, ${X(75)} ${-46}`,
-    `C ${X(105 + p[4])} ${-42 + p[5]}, ${X(122 + p[6])} ${-30 + p[7]}, ${X(130)} ${-16}`,
+    `C ${X(-50)} ${-42}, ${X(20)} ${-50}, ${X(75)} ${-46}`,
+    `C ${X(105)} ${-42}, ${X(122)} ${-30}, ${X(130)} ${-16}`,
     `L ${X(132)} ${-8}`,
     `L ${X(124)} 2`,
-    `C ${X(108 - p[0])} ${18 + p[1]}, ${X(55 - p[2])} ${28 - p[3]}, ${X(0)} 28`,
-    `C ${X(-55 + p[4])} ${26 - p[5]}, ${X(-92 + p[6])} ${18 + p[7]}, ${X(-104)} 14`,
+    `C ${X(108)} 18, ${X(55)} 28, ${X(0)} 28`,
+    `C ${X(-55)} 26, ${X(-92)} 18, ${X(-104)} 14`,
     `L ${X(-118)} 6`,
     `Z`,
   ].join(" ");
@@ -68,121 +62,253 @@ function felineClipPath(side: "left" | "right"): string {
   ].join(" ");
 }
 
-function felineIrisPath(side: "left" | "right"): string {
-  return felineClipPath(side);
-}
-
-/** Pre-computed flame keyframes — module-scope so they are stable
- *  across React re-renders. SMIL <animate> values attribute stays
- *  identical, so the browser's animation timeline never resets. */
-const FLAME_FRAMES = {
-  outer: {
-    left: buildKeyframes("left", 0),
-    right: buildKeyframes("right", 0),
-  },
-  mid: {
-    left: buildKeyframes("left", 0.43),
-    right: buildKeyframes("right", 0.43),
-  },
-} as const;
-
-function buildKeyframes(side: "left" | "right", phase: number): string {
-  const frames = [0, 1, 2, 3, 4, 5].map((i) => {
-    const seed = (i + phase) * 11;
-    // Bias the perturbation upward — top control points jump more than
-    // bottom ones — so the silhouette dances more like a real flame
-    // (fire rises, doesn't slosh symmetrically).
-    const p = Array.from({ length: 8 }, (_, j) => {
-      const angle = (seed + j * 1.3) * 0.7;
-      const isTop = j < 4;
-      const amp = isTop ? 8 : 3;
-      return Math.sin(angle) * amp + Math.cos(angle * 2.1) * (amp * 0.6);
-    });
-    return felineEyePath(side, p);
-  });
-  return frames.concat(frames[0]).join(";");
-}
-
-const SPLINES = "0.4 0 0.6 1; 0.4 0 0.6 1; 0.4 0 0.6 1; 0.4 0 0.6 1; 0.4 0 0.6 1; 0.4 0 0.6 1";
-
-/** Build one flame frame — asymmetric, organic shape with multiple
- *  bezier control points. NOT a triangle — left and right sides have
- *  independent bulges, the tip curls left or right based on `curl`,
- *  the base is wider than the tip. Eight control points total per
- *  silhouette so the curve reads as soft fire, not a polygon. */
-function flameFrame(opts: {
-  width: number;
-  height: number;
-  curl: number;        // -1..1 — tip horizontal offset / curl direction
-  leftBulge: number;   // 0..1 — height of left-side bulge
-  rightBulge: number;
-  taper: number;       // 0..1 — how much narrower the upper body is vs base
-}): string {
-  const { width: w, height: h, curl, leftBulge, rightBulge, taper } = opts;
-  const tipX = curl * 6;
-  const leftBulgeX = -w * (1.2 + Math.abs(curl) * 0.3);
-  const rightBulgeX = w * (1.2 + Math.abs(curl) * 0.3);
-  const upperLeftX = -w * taper + curl * 3;
-  const upperRightX = w * taper + curl * 3;
-  const lbY = -h * leftBulge;
-  const rbY = -h * rightBulge;
-
-  return [
-    // Base left
-    `M ${-w} 0`,
-    // Left side: base → bulge → upper body → near tip
-    `C ${leftBulgeX} ${lbY * 0.6}, ${leftBulgeX} ${lbY}, ${upperLeftX - 1} ${-h * 0.65}`,
-    `C ${upperLeftX - 2 + curl * 2} ${-h * 0.8}, ${tipX - w * 0.5} ${-h * 0.95}, ${tipX} ${-h}`,
-    // Right side back down: tip → near tip → upper body → bulge → base
-    `C ${tipX + w * 0.5} ${-h * 0.95}, ${upperRightX + 2 + curl * 2} ${-h * 0.8}, ${upperRightX + 1} ${-h * 0.65}`,
-    `C ${rightBulgeX} ${rbY}, ${rightBulgeX} ${rbY * 0.6}, ${w} 0`,
-    `Z`,
-  ].join(" ");
-}
-
-/** Build a sequence of flame frames with varying curl + bulges to
- *  produce an asymmetric flickering animation. Tip curls alternate
- *  direction so the flame "reaches" left, then right, then left. */
-function flameKeyframeSet(seed: number): string {
-  const frames = [0, 1, 2, 3, 4].map((i) => {
-    const t = (i + seed) * 0.7;
-    return flameFrame({
-      width: 7 + Math.sin(t * 1.3) * 1,
-      height: 28 + Math.sin(t * 0.9) * 6,
-      curl: Math.sin(t * 1.7) * 0.6 + Math.cos(t * 2.1) * 0.3,
-      leftBulge: 0.32 + Math.sin(t * 1.1) * 0.18,
-      rightBulge: 0.32 + Math.cos(t * 1.4) * 0.18,
-      taper: 0.45 + Math.sin(t * 0.8) * 0.15,
-    });
-  });
-  return frames.concat(frames[0]).join(";");
-}
-
-// Pre-computed flame frame sets — different seeds give each tongue a
-// unique flicker pattern so they never animate in lockstep.
-const TONGUE_KEYFRAMES = [
-  flameKeyframeSet(0),
-  flameKeyframeSet(1.3),
-  flameKeyframeSet(2.7),
-  flameKeyframeSet(4.1),
-  flameKeyframeSet(5.5),
-  flameKeyframeSet(7.0),
-  flameKeyframeSet(8.4),
+// SVG viewBox coords. Eye centers at (220, 130) and (540, 130) in 760×260.
+const VIEW_W = 760;
+const VIEW_H = 260;
+const EYE_CENTERS = [
+  { x: 220, y: 130 }, // left of pair
+  { x: 540, y: 130 }, // right of pair
 ];
 
-const TONGUE_SPLINES = "0.4 0 0.6 1; 0.4 0 0.6 1; 0.4 0 0.6 1; 0.4 0 0.6 1; 0.4 0 0.6 1";
+/**
+ * Sample a point on the cat-eye outline at parametric angle θ in [0, 2π).
+ * Returns local coords centered at (0, 0). The outline isn't a true
+ * ellipse — top is taller than bottom, asymmetric like the SVG path.
+ */
+function eyeOutlinePoint(theta: number): { x: number; y: number; nx: number; ny: number } {
+  // Width: ~125, top height: ~47, bottom height: ~28
+  // θ = 0 → outer corner (right), π/2 → bottom, π → inner corner, 3π/2 → top
+  const a = 125; // semi-major (horizontal)
+  const topB = 47;
+  const botB = 28;
+
+  const cosT = Math.cos(theta);
+  const sinT = Math.sin(theta);
+  const b = sinT > 0 ? botB : topB; // sin > 0 = below center (positive y)
+
+  const x = a * cosT;
+  const y = b * sinT;
+
+  // Outward normal — for an ellipse, normal at (a cos θ, b sin θ) points
+  // along (b cos θ, a sin θ) normalized
+  const nxRaw = b * cosT;
+  const nyRaw = a * sinT;
+  const len = Math.sqrt(nxRaw * nxRaw + nyRaw * nyRaw) || 1;
+  return { x, y, nx: nxRaw / len, ny: nyRaw / len };
+}
+
+// ─── Particle system ───────────────────────────────────────────────────────
+
+type Particle = {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  life: number;     // 0..1, 1 = dead
+  maxLife: number;  // seconds
+  size: number;
+  hot: number;      // 0..1, brightness boost
+};
+
+const MAX_PARTICLES = 480;
+
+function emitParticle(
+  particles: Particle[],
+  eyeCenter: { x: number; y: number },
+  side: "left" | "right",
+): void {
+  if (particles.length >= MAX_PARTICLES) return;
+  // Bias spawning toward the top half of the outline (fire rises from
+  // the rim, more of it visible at the top).
+  let theta: number;
+  const r = Math.random();
+  if (r < 0.6) {
+    // top half: 3π/2 ± π/2
+    theta = Math.PI * 1.5 + (Math.random() - 0.5) * Math.PI;
+  } else if (r < 0.85) {
+    // outer corner area
+    theta = Math.PI * 2 - Math.random() * Math.PI * 0.4;
+    if (side === "left") theta = Math.PI - theta;
+  } else {
+    // bottom half (less)
+    theta = Math.random() * Math.PI;
+  }
+
+  const local = eyeOutlinePoint(theta);
+  const x = eyeCenter.x + local.x;
+  const y = eyeCenter.y + local.y;
+
+  // Initial velocity: outward push + strong upward bias (fire rises)
+  // px/sec in local SVG coordinate space (will be scaled by canvas DPR)
+  const speed = 8 + Math.random() * 14;
+  const upwardBias = 35 + Math.random() * 30;
+  const jitter = (Math.random() - 0.5) * 8;
+
+  particles.push({
+    x,
+    y,
+    vx: local.nx * speed + jitter,
+    vy: local.ny * speed * 0.4 - upwardBias, // dampen outward y, bias up
+    life: 0,
+    maxLife: 0.7 + Math.random() * 0.6,
+    size: 6 + Math.random() * 9,
+    hot: Math.random() * 0.4 + 0.6,
+  });
+}
+
+function updateParticles(particles: Particle[], dt: number): Particle[] {
+  for (const p of particles) {
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    // Anti-gravity: continuous upward acceleration
+    p.vy -= 22 * dt;
+    // Horizontal drag
+    p.vx *= Math.pow(0.5, dt);
+    // Slight horizontal drift jitter for organic motion
+    p.vx += (Math.random() - 0.5) * 8 * dt;
+    p.life += dt / p.maxLife;
+    // Particles shrink as they age + rise (visual taper at flame tip)
+    p.size *= Math.pow(0.85, dt);
+  }
+  return particles.filter((p) => p.life < 1);
+}
+
+function renderParticles(
+  ctx: CanvasRenderingContext2D,
+  particles: Particle[],
+  scale: number,
+): void {
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+
+  for (const p of particles) {
+    const lifeRatio = p.life;       // 0 = young, 1 = dead
+    const ageOpacity = (1 - lifeRatio) * 0.85;
+    if (ageOpacity < 0.02) continue;
+
+    const size = p.size * scale * (1 - lifeRatio * 0.4);
+    if (size < 1) continue;
+
+    // Color: white-hot core when young → cyan when older → dark when dying
+    // Use a 3-stop radial gradient for the soft fire glow
+    const hot = p.hot * (1 - lifeRatio * 0.7);
+    const innerR = Math.floor(180 + hot * 75);  // 180..255
+    const innerG = Math.floor(230 + hot * 25);  // 230..255
+    const innerB = 255;
+    const innerA = ageOpacity * 0.95;
+
+    const midR = 80;
+    const midG = 200;
+    const midB = 230;
+    const midA = ageOpacity * 0.5;
+
+    const grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, size);
+    grad.addColorStop(0, `rgba(${innerR},${innerG},${innerB},${innerA})`);
+    grad.addColorStop(0.45, `rgba(${midR},${midG},${midB},${midA})`);
+    grad.addColorStop(1, "rgba(8,30,50,0)");
+
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, size, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
 export function PredatorEyes() {
-  const ref = useRef<HTMLDivElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const [cursor, setCursor] = useState({ x: 0, y: 0 });
   const [scrollY, setScrollY] = useState(0);
+  const [reduceMotion, setReduceMotion] = useState(false);
 
   useEffect(() => {
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const onChange = () => setReduceMotion(mq.matches);
+    onChange();
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+
+  // Canvas particle loop. Deliberately decoupled from React state — the
+  // animation runs entirely inside the effect's closure, no re-render
+  // dependencies that could restart it.
+  useEffect(() => {
+    if (reduceMotion) return;
+    const canvas = canvasRef.current;
+    const wrapper = wrapperRef.current;
+    if (!canvas || !wrapper) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const particles: Particle[] = [];
+    let lastTime = performance.now();
+    let raf = 0;
+    let cwScale = 1;
+
+    const fitCanvas = () => {
+      const rect = wrapper.getBoundingClientRect();
+      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      canvas.style.width = `${rect.width}px`;
+      canvas.style.height = `${rect.height}px`;
+      // Convert SVG-space (760 wide) coordinates to canvas-pixel space.
+      // We render particles in SVG coords, then scale.
+      cwScale = (rect.width * dpr) / VIEW_W;
+      ctx.setTransform(cwScale, 0, 0, cwScale, 0, 0);
+    };
+    fitCanvas();
+
+    const onResize = () => fitCanvas();
+    window.addEventListener("resize", onResize);
+
+    const tick = (now: number) => {
+      const dt = Math.min(0.05, (now - lastTime) / 1000);
+      lastTime = now;
+
+      // Emit ~5 particles per eye per frame at 60fps (capped at MAX)
+      const emitCount = Math.max(1, Math.floor(dt * 240));
+      for (const eye of EYE_CENTERS) {
+        for (let i = 0; i < emitCount; i++) {
+          emitParticle(particles, eye, eye.x < VIEW_W / 2 ? "left" : "right");
+        }
+      }
+
+      const live = updateParticles(particles, dt);
+      // Replace array contents in place to keep ref stable
+      particles.length = 0;
+      particles.push(...live);
+
+      // Clear with subtle fade for trailing glow effect (real fire has trails)
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.globalCompositeOperation = "destination-out";
+      ctx.fillStyle = "rgba(0,0,0,0.18)";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.restore();
+      ctx.setTransform(cwScale, 0, 0, cwScale, 0, 0);
+
+      renderParticles(ctx, particles, 1);
+
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", onResize);
+    };
+  }, [reduceMotion]);
+
+  // Cursor + scroll listeners for pupil tracking
+  useEffect(() => {
     const onMove = (e: MouseEvent) => {
-      if (!ref.current) return;
-      const rect = ref.current.getBoundingClientRect();
+      if (!wrapperRef.current) return;
+      const rect = wrapperRef.current.getBoundingClientRect();
       const cx = e.clientX - (rect.left + rect.width / 2);
       const cy = e.clientY - (rect.top + rect.height / 2);
       setCursor({
@@ -206,13 +332,14 @@ export function PredatorEyes() {
   const py = cursor.y * 8 + scrollNorm * 6;
 
   return (
-    <div ref={ref} className="eyes" aria-hidden>
+    <div ref={wrapperRef} className="eyes" aria-hidden>
+      <canvas ref={canvasRef} className="eyes-canvas" />
       <svg
-        viewBox="0 0 760 260"
+        className="eyes-svg"
+        viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
         width="100%"
         height="100%"
         preserveAspectRatio="xMidYMid meet"
-        style={{ display: "block", overflow: "visible" }}
       >
         <defs>
           <filter id="eye-glow" x="-60%" y="-60%" width="220%" height="220%">
@@ -226,53 +353,11 @@ export function PredatorEyes() {
             </feMerge>
           </filter>
 
-          {/* Soft-fire blur: combines the source path with a wider
-              gaussian-blurred copy underneath. Result reads as a plasma
-              flame with bright core + soft halo, not a hard-edged
-              polygon. Critical for "kobaran api" feel — without it the
-              tongue paths look like cut-out triangles. */}
-          <filter id="fire-soft" x="-50%" y="-50%" width="200%" height="200%">
-            <feGaussianBlur stdDeviation="1.4" result="blurred" />
-            <feMerge>
-              <feMergeNode in="blurred" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
-
-          {/* Heavy blur for outer flame halo */}
-          <filter id="fire-glow" x="-50%" y="-50%" width="200%" height="200%">
-            <feGaussianBlur stdDeviation="4" />
-            <feComponentTransfer>
-              <feFuncA type="linear" slope="0.7" />
-            </feComponentTransfer>
-          </filter>
-
           <linearGradient id="iris-grad" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#a5f3fc" />
             <stop offset="45%" stopColor="#06b6d4" />
             <stop offset="100%" stopColor="#083344" />
           </linearGradient>
-
-          {/* Flame tongue gradient — tip is white-hot, base is cyan.
-              Real fire reads bright at apex, denser/cooler at root. */}
-          <linearGradient id="tongue-grad" x1="0" y1="1" x2="0" y2="0">
-            <stop offset="0%"  stopColor="#06b6d4" stopOpacity="0.85" />
-            <stop offset="55%" stopColor="#67e8f9" stopOpacity="0.9" />
-            <stop offset="100%" stopColor="#ecfeff" stopOpacity="0.6" />
-          </linearGradient>
-
-          {/* Hot-spot glow for the central top of each eye */}
-          <radialGradient id="hot-spot" cx="50%" cy="50%" r="50%">
-            <stop offset="0%"  stopColor="#ecfeff" stopOpacity="0.9" />
-            <stop offset="40%" stopColor="#67e8f9" stopOpacity="0.4" />
-            <stop offset="100%" stopColor="#06b6d4" stopOpacity="0" />
-          </radialGradient>
-
-          <radialGradient id="eye-halo" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor="#06b6d4" stopOpacity="0.4" />
-            <stop offset="55%" stopColor="#06b6d4" stopOpacity="0.1" />
-            <stop offset="100%" stopColor="#06b6d4" stopOpacity="0" />
-          </radialGradient>
 
           <clipPath id="clip-eye-left" clipPathUnits="userSpaceOnUse">
             <path d={felineClipPath("left")} />
@@ -282,14 +367,9 @@ export function PredatorEyes() {
           </clipPath>
         </defs>
 
-        <ellipse cx="220" cy="130" rx="200" ry="100" fill="url(#eye-halo)" />
-        <ellipse cx="540" cy="130" rx="200" ry="100" fill="url(#eye-halo)" />
+        <EyeShape cx={220} side="left" />
+        <EyeShape cx={540} side="right" />
 
-        {/* Flame layers — memoized, never re-render on cursor/scroll */}
-        <FlameLayers cx={220} side="left" />
-        <FlameLayers cx={540} side="right" />
-
-        {/* Pupils — re-render freely on cursor/scroll */}
         <Pupil cx={220} side="left" px={px} py={py} />
         <Pupil cx={540} side="right" px={px} py={py} />
       </svg>
@@ -297,292 +377,28 @@ export function PredatorEyes() {
   );
 }
 
-// ─── Memoized flame layers + embers (no cursor / scroll deps) ───────────────
-
-const FlameLayers = memo(function FlameLayers({
+const EyeShape = memo(function EyeShape({
   cx,
   side,
 }: {
   cx: number;
   side: "left" | "right";
 }) {
-  const basePath = felineEyePath(side);
+  const path = felineEyePath(side);
   return (
     <g transform={`translate(${cx}, 130)`}>
-      {/* Outer halo — wide blurred stroke, reads as the cyan "aura"
-          surrounding a real flame. Heavy blur + thick stroke =
-          glowing fire ring around the eye outline. */}
+      {/* Sharp inner outline — undistorted, the "real" predator edge */}
       <path
-        d={basePath}
-        fill="none"
-        stroke="#67e8f9"
-        strokeWidth="14"
-        opacity="0.4"
-        filter="url(#fire-glow)"
-      >
-        <animate
-          attributeName="d"
-          values={FLAME_FRAMES.outer[side]}
-          dur="2.4s"
-          repeatCount="indefinite"
-          calcMode="spline"
-          keySplines={SPLINES}
-        />
-      </path>
-
-      {/* Mid plasma — wider stroke + soft blur reads as the
-          combustion zone immediately around the outline. */}
-      <path
-        className="flame-flow-mid"
-        d={basePath}
-        fill="none"
-        stroke="#22d3ee"
-        strokeWidth="6"
-        opacity="0.7"
-        filter="url(#fire-soft)"
-      >
-        <animate
-          attributeName="d"
-          values={FLAME_FRAMES.mid[side]}
-          dur="1.4s"
-          repeatCount="indefinite"
-          calcMode="spline"
-          keySplines={SPLINES}
-        />
-      </path>
-
-      {/* Inner fire stroke — sharper but still gradient-soft, the
-          burning edge that defines the silhouette. */}
-      <path
-        className="flame-flow-out"
-        d={basePath}
-        fill="rgba(8,30,40,0.35)"
+        d={path}
+        fill="rgba(8,30,40,0.45)"
         stroke="#06b6d4"
-        strokeWidth="2.4"
-        opacity="0.95"
-      >
-        <animate
-          attributeName="d"
-          values={FLAME_FRAMES.outer[side]}
-          dur="2.4s"
-          repeatCount="indefinite"
-          calcMode="spline"
-          keySplines={SPLINES}
-        />
-      </path>
-
-      {/* Iris fill */}
-      <path d={felineIrisPath(side)} fill="url(#iris-grad)" opacity="0.32" />
-
-      {/* Bright core line — undistorted thin white stroke right on the
-          edge so the fire reads as "outline drawn in flame" */}
-      <path
-        d={basePath}
-        fill="none"
-        stroke="#ecfeff"
-        strokeWidth="0.8"
-        opacity="0.9"
+        strokeWidth="1.8"
       />
-
-      {/* Flame bursts — small flame petals popping OUTWARD perpendicular
-          to the outline at distributed points around the perimeter */}
-      <FlameBursts side={side} />
-
-      {/* Embers — rising particles from above the eye */}
-      <Embers side={side} />
+      {/* Iris fill */}
+      <path d={felineClipPath(side)} fill="url(#iris-grad)" opacity="0.4" />
     </g>
   );
 });
-
-const FlameBursts = memo(function FlameBursts({
-  side,
-}: {
-  side: "left" | "right";
-}) {
-  const flip = side === "left" ? -1 : 1;
-  // 14 flame petals distributed AROUND the entire eye outline, each
-  // pointing OUTWARD perpendicular to the outline tangent at its
-  // position. The eye outline becomes a fire silhouette — flames lick
-  // outward in every direction, not just upward.
-  //
-  // Positions hand-picked from the eye path geometry. Angles in
-  // degrees (0 = up, 90 = right, 180 = down). Sign flipped per side
-  // so the right-eye flames lean rightward and left-eye flames
-  // lean leftward.
-  const tongues = [
-    // Top arc — flames pointing up
-    { x: -90 * flip, y: -28, angle: -30 * flip, kf: 0, dur: "1.4s", delay: "0s",   scale: 0.7 },
-    { x: -60 * flip, y: -42, angle: -15 * flip, kf: 1, dur: "1.6s", delay: "0.3s", scale: 0.9 },
-    { x: -25 * flip, y: -48, angle: -5  * flip, kf: 2, dur: "1.3s", delay: "0.5s", scale: 1.1 },
-    { x:  10 * flip, y: -49, angle:  0,         kf: 3, dur: "1.5s", delay: "0.8s", scale: 1.0 },
-    { x:  50 * flip, y: -46, angle:  10 * flip, kf: 4, dur: "1.7s", delay: "0.2s", scale: 1.0 },
-    { x:  90 * flip, y: -36, angle:  35 * flip, kf: 5, dur: "1.4s", delay: "0.6s", scale: 0.85 },
-    // Outer corner — flame pointing diagonally outward
-    { x: 125 * flip, y: -16, angle:  70 * flip, kf: 6, dur: "1.5s", delay: "0.4s", scale: 0.7 },
-    { x: 130 * flip, y:   0, angle:  95 * flip, kf: 0, dur: "1.6s", delay: "1.0s", scale: 0.75 },
-    // Bottom arc — flames pointing down-outward
-    { x: 100 * flip, y:  20, angle: 130 * flip, kf: 1, dur: "1.4s", delay: "0.7s", scale: 0.7 },
-    { x:  60 * flip, y:  28, angle: 160 * flip, kf: 2, dur: "1.5s", delay: "0.1s", scale: 0.8 },
-    { x:  10 * flip, y:  29, angle: 180,        kf: 3, dur: "1.6s", delay: "0.9s", scale: 0.85 },
-    { x: -40 * flip, y:  27, angle: 195 * flip, kf: 4, dur: "1.3s", delay: "0.3s", scale: 0.7 },
-    { x: -85 * flip, y:  18, angle: 225 * flip, kf: 5, dur: "1.7s", delay: "0.6s", scale: 0.75 },
-    // Inner corner — flame pointing inward-down then upward
-    { x: -118 * flip, y:  6, angle: 265 * flip, kf: 6, dur: "1.5s", delay: "0.4s", scale: 0.65 },
-  ];
-  return (
-    <g>
-      {tongues.map((t, i) => {
-        const initialPath = TONGUE_KEYFRAMES[t.kf].split(";")[0];
-        // translate to anchor on outline → rotate so tongue points
-        // OUTWARD perpendicular → scale per-position prominence
-        const transform = `translate(${t.x}, ${t.y}) rotate(${t.angle}) scale(${t.scale})`;
-        return (
-          <g key={i} transform={transform}>
-            {/* Soft halo — heavily blurred copy of the same flame path
-                renders as a glowing aura around the tongue. Animated in
-                lockstep with the core. */}
-            <path
-              d={initialPath}
-              fill="#06b6d4"
-              opacity="0.55"
-              filter="url(#fire-glow)"
-            >
-              <animate
-                attributeName="d"
-                values={TONGUE_KEYFRAMES[t.kf]}
-                dur={t.dur}
-                begin={t.delay}
-                repeatCount="indefinite"
-                calcMode="spline"
-                keySplines={TONGUE_SPLINES}
-              />
-            </path>
-            {/* Core flame body — gradient fill cyan-base → white tip,
-                soft-fire blur (small std-dev) makes the edge plasma-soft
-                instead of polygon-crisp. */}
-            <path
-              d={initialPath}
-              fill="url(#tongue-grad)"
-              filter="url(#fire-soft)"
-              opacity="0.95"
-            >
-              <animate
-                attributeName="d"
-                values={TONGUE_KEYFRAMES[t.kf]}
-                dur={t.dur}
-                begin={t.delay}
-                repeatCount="indefinite"
-                calcMode="spline"
-                keySplines={TONGUE_SPLINES}
-              />
-              <animate
-                attributeName="opacity"
-                values="0.5;1;0.7;0.95;0.5"
-                dur={t.dur}
-                begin={t.delay}
-                repeatCount="indefinite"
-              />
-            </path>
-            {/* Hot-bright core — small white path inside, narrower &
-                slightly shorter, reads as the brightest plasma center. */}
-            <path
-              d={initialPath}
-              fill="#ecfeff"
-              opacity="0.4"
-              transform="scale(0.55, 0.85)"
-            >
-              <animate
-                attributeName="d"
-                values={TONGUE_KEYFRAMES[t.kf]}
-                dur={t.dur}
-                begin={t.delay}
-                repeatCount="indefinite"
-                calcMode="spline"
-                keySplines={TONGUE_SPLINES}
-              />
-              <animate
-                attributeName="opacity"
-                values="0.2;0.7;0.3;0.6;0.2"
-                dur={t.dur}
-                begin={t.delay}
-                repeatCount="indefinite"
-              />
-            </path>
-          </g>
-        );
-      })}
-    </g>
-  );
-});
-
-const Embers = memo(function Embers({ side }: { side: "left" | "right" }) {
-  const flip = side === "left" ? -1 : 1;
-  // 18 embers per eye, varied sizes/colors/speeds, with horizontal
-  // drift via cx animation so they don't rise straight (real sparks
-  // wobble in the heat plume).
-  const seeds = Array.from({ length: 18 }, (_, i) => {
-    // Distribute x positions across top edge of eye + some randomness
-    const baseX = (-100 + (i * 220) / 17) * flip;
-    const drift = ((i % 3) - 1) * 8 * flip; // left/center/right drift
-    return {
-      x: baseX,
-      driftX: baseX + drift,
-      delay: (i * 0.18) % 2.4,
-      dur: 1.8 + (i % 4) * 0.2,
-      riseHi: 56 + (i % 5) * 6,
-      riseFar: 80 + (i % 6) * 8,
-      rx: i % 3 === 0 ? 2.4 : i % 3 === 1 ? 1.8 : 1.2,
-      // Alternate between cyan and white-hot for color variety
-      fill: i % 4 === 0 ? "#ecfeff" : i % 4 === 1 ? "#a5f3fc" : "#67e8f9",
-    };
-  });
-  return (
-    <g>
-      {seeds.map((s, i) => (
-        <ellipse
-          key={i}
-          cx={s.x}
-          cy={-38}
-          rx={s.rx}
-          ry={s.rx * 1.5}
-          fill={s.fill}
-          opacity="0"
-        >
-          <animate
-            attributeName="cy"
-            values={`-38;-${s.riseHi};-${s.riseFar}`}
-            dur={`${s.dur}s`}
-            begin={`${s.delay}s`}
-            repeatCount="indefinite"
-          />
-          <animate
-            attributeName="cx"
-            values={`${s.x};${s.driftX};${s.x - (s.driftX - s.x) * 0.5}`}
-            dur={`${s.dur}s`}
-            begin={`${s.delay}s`}
-            repeatCount="indefinite"
-          />
-          <animate
-            attributeName="opacity"
-            values="0;1;0.6;0"
-            dur={`${s.dur}s`}
-            begin={`${s.delay}s`}
-            repeatCount="indefinite"
-          />
-          <animate
-            attributeName="rx"
-            values={`${s.rx};${s.rx * 0.7};0.4`}
-            dur={`${s.dur}s`}
-            begin={`${s.delay}s`}
-            repeatCount="indefinite"
-          />
-        </ellipse>
-      ))}
-    </g>
-  );
-});
-
-// ─── Pupil (re-renders on cursor / scroll) ──────────────────────────────────
 
 function Pupil({
   cx,

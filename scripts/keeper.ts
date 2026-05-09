@@ -26,7 +26,9 @@ import { type AnchorProvider, Wallet } from "@coral-xyz/anchor";
 import { Connection, Keypair, PublicKey } from "@solana/web3.js";
 
 import { fetchQuote, fetchSwapInstructions } from "../lib/jupiter";
-import { triggerAggregate } from "../lib/arcium";
+// TODO: re-import once Arcium MXE is deployed and trigger_aggregate
+// gets a real coordinator call. For now, the keeper is a placeholder
+// for the post-MVP cron service.
 
 // ─── Config ───
 
@@ -121,11 +123,9 @@ async function handleWindowExpiry(
   //   .accounts({ caller: state.wallet.publicKey, pool: state.poolPubkey, window: windowPubkey })
   //   .rpc();
 
-  // 2. Trigger Arcium MXE compute (off-chain SDK call)
-  const aggregateResult = await triggerAggregate(
-    windowPubkey.toBase58(),
-    [], // intent hashes from window's intent accounts
-  );
+  // 2. Trigger Arcium MXE compute (off-chain SDK call) — TODO when MXE is deployed
+  const aggregateResult = { totalAmount: 0n, participantCount: 0 };
+  void windowPubkey;
 
   console.log(
     `[keeper] aggregate result: ${aggregateResult.totalAmount} USDC, ${aggregateResult.participantCount} participants`,

@@ -1,7 +1,15 @@
 # Tide — Arcium MXE Integration Plan
 
 > Where Arcium fits in Tide's mechanism, what's stubbed today, and the exact
-> code-change list when Cohort 2 approval + SDK access lands.
+> code-change list to flip from stub to real MPC.
+>
+> **Status as of 2026-05-09**: Arcium **mainnet-alpha is LIVE** on Solana
+> mainnet (per https://docs.arcium.com). Earlier this doc referenced
+> "Cohort 2 approval"; that gating is gone. Path is:
+> 1. Install Arcium CLI on Linux/Mac (Windows not supported — needs WSL2)
+> 2. Build + deploy our `confidential-ixs/` as an MXE program
+> 3. Wire `@arcium-hq/client` (already published, npm-installable)
+> 4. Update `lib/arcium.ts` to call real `RescueCipher` instead of SHA-256 stub
 
 ---
 
@@ -46,43 +54,54 @@ Arcium today."
 
 ## Real integration: code-change list
 
-Once Cohort 2 approval arrives and `@arcium/client` SDK is published, these
-are the surgical changes — no architecture rewrite needed.
+The migration from SHA-256 stub to real MPC is now config + small code
+changes. Real package + API names from `@arcium-hq/client` v0.9.x:
 
 ### Frontend (`lib/arcium.ts`)
 
 ```ts
-// Replace stub encryptIntent with real SDK calls
-import { ArciumClient, MXEKey } from "@arcium/client";
+// Real Arcium browser-side encryption uses the RescueCipher + x25519
+// key exchange. The MXE-published public key is fetched at runtime
+// from the deployed MXE program; client generates its own keypair,
+// computes a shared secret, encrypts intent inputs.
+import { RescueCipher, x25519 } from "@arcium-hq/client";
+import { randomBytes } from "node:crypto";
 
-const arcium = new ArciumClient({
-  cluster: process.env.ARCIUM_CLUSTER_URL!,
-  apiKey: process.env.ARCIUM_API_KEY!, // server-only — MOVE TO API ROUTE
-});
+export async function encryptIntent(
+  params: IntentParams,
+  mxePublicKey: Uint8Array,
+): Promise<EncryptedIntent> {
+  const privateKey = x25519.utils.randomSecretKey();
+  const publicKey = x25519.getPublicKey(privateKey);
+  const nonce = randomBytes(16);
+  const sharedSecret = x25519.getSharedSecret(privateKey, mxePublicKey);
+  const cipher = new RescueCipher(sharedSecret);
 
-export async function encryptIntent(params: IntentParams): Promise<EncryptedIntent> {
-  const result = await arcium.encryptShares({
-    function: "aggregate_intents",
-    inputs: {
-      amount: params.amount,
-      max_slippage_bps: params.maxSlippageBps,
-    },
-    nullifier: deriveNullifier(params.userPubkey, params.windowPubkey),
-  });
+  const plaintext = [
+    BigInt(params.amount),
+    BigInt(params.maxSlippageBps),
+  ];
+  const ciphertext = cipher.encrypt(plaintext, nonce);
+
+  const commitmentHash = await crypto.subtle.digest(
+    "SHA-256",
+    new Uint8Array([...ciphertext, ...publicKey, ...nonce]),
+  );
+
   return {
-    intentHash: result.commitmentHash,   // 32 bytes — this lands on-chain
-    encryptedShares: result.shares,      // off-chain, sent to MXE separately
+    intentHash: new Uint8Array(commitmentHash),
+    encryptedShares: new Uint8Array(ciphertext),
     visibleAmount: params.amount,
   };
 }
 ```
 
-The visible amount stays on-chain (we need it in escrow accounting), but
-`max_slippage_bps` becomes encrypted-only in the MXE shares.
+`mxePublicKey` is fetched once at app load via Arcium's `getMXEPublicKeyWithRetry`
+helper (or equivalent), keyed by our deployed MXE program id. Cached so users
+don't re-fetch each commit.
 
-`ARCIUM_API_KEY` is server-only — the client should hit a `/api/arcium/encrypt`
-Next.js Route Handler that proxies to Arcium with the secret. Captured in
-`.env.example` already.
+The visible amount stays on-chain (we need it in escrow accounting), but
+`max_slippage_bps` becomes encrypted-only inside the MXE shares.
 
 ### Confidential compute (`confidential-ixs/src/lib.rs`)
 

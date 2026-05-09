@@ -18,15 +18,24 @@ const geistMono = Geist_Mono({
   display: "swap",
 });
 
+// Use Vercel-injected URL when deployed, fallback to placeholder for local
+// dev. tide.fun is the target domain post-mainnet — until then OG previews
+// resolve to the live Vercel deployment so social shares render correctly.
+const SITE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL ??
+  (process.env.VERCEL_PROJECT_PRODUCTION_URL
+    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+    : "https://tide-dca.vercel.app");
+
 export const metadata: Metadata = {
   title: "Tide — DCA without MEV",
   description:
     "Hidden-Liquidity DCA Pool for Solana. Encrypted intents via Arcium MPC, aggregate execute via Jupiter, pro-rata distribute. Bots blind, retail wins.",
-  metadataBase: new URL("https://tide.fun"),
+  metadataBase: new URL(SITE_URL),
   openGraph: {
     title: "Tide — DCA without MEV",
     description: "Hidden-Liquidity DCA Pool for Solana.",
-    url: "https://tide.fun",
+    url: SITE_URL,
     siteName: "Tide",
     type: "website",
   },

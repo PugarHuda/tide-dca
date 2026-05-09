@@ -39,7 +39,7 @@ The full lifecycle is live on Solana devnet — Anchor program with 7 instructio
 - Arcium — confidential aggregate compute (mechanism core)
 - Privy — embedded wallet for non-crypto user onboarding
 - Jupiter — v6 routing CPI in the swap path
-- MoonPay — fiat → USDC onramp (planned, button stub)
+- MoonPay — fiat → USDC onramp button live on /setup with HMAC-SHA256 server signing
 - Reflect — yield on idle escrowed USDC (planned)
 
 ---
@@ -88,7 +88,7 @@ The full lifecycle is live on Solana devnet — Anchor program with 7 instructio
 
 - ✅ Anchor program deployed: `HanBZ74Q7syXerryjezBXCne23FUp6caeWeTPPAmebQg`
 - ✅ All 7 instructions live and tested
-- ✅ Test SPL mint deployed (`4YhohVQ8RmudchbAe2UBXcrdduVYkuqyU7hHviz2MSvT`) for end-to-end demo (Circle's faucet is region-blocked for many users, so Tide ships its own)
+- ✅ Test SPL mint deployed (`BKQ9HAzw2rnfUXpm6BKz2yvH4ikwKhC8dkgt73A8LTSh`) for end-to-end demo (Circle's faucet is region-blocked for many users, so Tide ships its own)
 - ✅ Real Jupiter v6 CPI in `execute_swap` (not stubbed) — escrow PDA signs via `invoke_signed`, ALT-resolved on client, VersionedTransaction
 - ✅ `/admin` operator console runs the full lifecycle (init_pool → init_window → mint_test_usdc → trigger_aggregate → execute_swap)
 - ✅ User flows live: wallet connect (Phantom + Privy embedded), `/setup` DCA position creation, `/dashboard` commit + claim, real-time balance subscriptions

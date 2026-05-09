@@ -10,8 +10,8 @@ const PROGRAM_ID = new PublicKey("HanBZ74Q7syXerryjezBXCne23FUp6caeWeTPPAmebQg")
 const USDC_MINT = new PublicKey("BKQ9HAzw2rnfUXpm6BKz2yvH4ikwKhC8dkgt73A8LTSh");
 const OLD_USDC_MINT = new PublicKey("4YhohVQ8RmudchbAe2UBXcrdduVYkuqyU7hHviz2MSvT");
 const SOL_MINT = new PublicKey("So11111111111111111111111111111111111111112");
-// Current authority: Fvys (CLI) — pre-rotation. Will rotate to Phantom after E2E pass.
-const EXPECTED_MINT_AUTHORITY = new PublicKey("FvyseLeVrGb1frkscvGJvtiwzrBMyuB54CLMrDaGKbtP");
+// Mint authority is the user's Phantom (post-rotation after E2E QA pass).
+const EXPECTED_MINT_AUTHORITY = new PublicKey("3QfHXyficacGxrFjmPLYy7RYFhfxsCR8i1H73BdtQK79");
 const TOKEN_PROGRAM = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
 
 const conn = new Connection(RPC, "confirmed");

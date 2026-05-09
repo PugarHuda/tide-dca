@@ -142,24 +142,25 @@ tide/
 |---|---|---|
 | **Arcium** | Encrypted intent + aggregate compute (mechanism core) | `confidential-ixs/src/lib.rs` |
 | **Phantom** | Default wallet + grand prize sponsor | `lib/providers.tsx` |
-| **Privy** | Non-crypto user onboarding | `lib/providers.tsx` (TODO) |
-| **MoonPay** | Fiat → USDC direct top-up | `lib/moonpay.ts` (TODO) |
-| **Reflect** | Yield on idle escrow USDC | `lib/reflect.ts` (TODO) |
+| **Privy** | Non-crypto user onboarding | `lib/providers.tsx`, `lib/privy-bridge.tsx`, `app/api/privy/verify/route.ts` |
+| **MoonPay** | Fiat → USDC direct top-up | `lib/moonpay.ts`, `components/moonpay-button.tsx`, `app/api/moonpay/sign/route.ts` |
+| **Reflect** | Yield on idle escrow USDC | `lib/reflect.ts`, `components/reflect-card.tsx`, `components/reflect-stake-button.tsx` |
+| **Raydium** | DEX backbone routing | `lib/raydium.ts`, `components/raydium-quote-card.tsx` |
+| **Pyth** | Window-time SOL/USD oracle | `lib/pyth.ts`, `components/pyth-oracle-card.tsx` |
+| **Squads/Altitude** | Pool authority multisig path | `lib/squads.ts`, `components/squads-create-button.tsx`, `lib/hooks/use-authority-class.ts` |
 
 ## Build Status
 
 - [x] Idea phase complete (`.superstack/idea-context.md`)
 - [x] Scaffold complete (`.superstack/build-context.md`)
-- [ ] Anchor program: instruction logic implemented (stubs in place)
-- [ ] Arcis confidential function: deployed to MXE
-- [ ] Frontend: wallet connect tested
-- [ ] Frontend: setup flow live
-- [ ] Frontend: dashboard live
-- [ ] Jupiter IOC integration tested
-- [ ] First DCA position created on devnet
-- [ ] First aggregate window successfully executed
+- [x] Anchor program: 7 instructions live + tested on devnet
+- [x] Arcis confidential function: skeleton + intent hash on-chain (Cohort 2 mainnet target)
+- [x] Frontend: wallet connect (Phantom + Privy), setup wizard, dashboard, admin console
+- [x] Jupiter v6 CPI: real PDA-signed swap via execute_swap (devnet validated)
+- [x] Full E2E lifecycle: 7 of 7 instructions validated on devnet
+- [x] 9 sponsor integrations shipped (Phantom, Jupiter, Privy, Squads, Raydium, MoonPay, Pyth, Reflect, Arcium)
 - [ ] Demo Loom recorded
-- [ ] Submission to Colosseum
+- [ ] Submission to Colosseum (deadline 2026-05-11)
 
 ## Claude Code Working Notes
 

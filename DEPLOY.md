@@ -112,7 +112,7 @@ npm run dev
    this between cycles; in production a cron will hit the same instruction.
 
 3. **mint_test_usdc** *(devnet only)* — `USDC_MINT_DEVNET` is a custom SPL
-   mint we control (`4YhohVQ8RmudchbAe2UBXcrdduVYkuqyU7hHviz2MSvT`, 6
+   mint we control (`BKQ9HAzw2rnfUXpm6BKz2yvH4ikwKhC8dkgt73A8LTSh`, 6
    decimals). Mint authority = the wallet listed during `spl-token
    create-token --mint-authority`. Click "Mint test USDC to my wallet" with
    that wallet connected to airdrop yourself test USDC for the
@@ -149,14 +149,16 @@ button is wired — the output escrow has no balance.
 Not for the hackathon. Capture for after-submission planning.
 
 - [ ] Audit (~$15-30K, 2-4 weeks) — Ottersec, Halborn, or Sec3
-- [ ] Real Jupiter Swap CPI in `execute_swap` (replace `min_acquired_amount` stub)
-- [ ] Real Arcium MXE for `compute_distribution` (replace pro-rata fallback)
-- [ ] Pyth oracle wiring for window-time price reference
+- [x] Real Jupiter Swap CPI in `execute_swap` — escrow PDA-signed, ALT-resolved (devnet validated, [`2yCSusUk...`](https://explorer.solana.com/tx/2yCSusUkWNS59y1ypX38AB5c1rN7NG4DwwS5Q4G6yY91eVqcuXA5Fp9JUY2NKxN964Ldtr3QLFHyb2mD8Ji81Bu7?cluster=devnet))
+- [ ] Real Arcium MXE for `compute_distribution` — Cohort 2 access pending; typed Rust fallback in place
+- [ ] Pyth oracle on-chain consumer in `execute_swap` for honest slippage_bps (frontend `lib/pyth.ts` ready)
 - [ ] Bug bounty (Immunefi, ~$50-100K critical bounty)
 - [ ] Per-user position cap + circuit breakers
 - [ ] Mainnet program-id keypair stored offline
-- [ ] Upgrade authority migrated to multisig (Squads V4)
+- [ ] Upgrade authority migrated to multisig (Squads V4) — `lib/squads.ts` create flow live in /admin
 - [ ] Mainnet USDC (`EPjFW...`) wired in `constants.ts`
+- [ ] Real MoonPay production API key + DFlow integration
+- [ ] Reflect on-chain CPI for idle escrow yield (frontend stake button + ix builder ready in `lib/reflect.ts`)
 
 ---
 
@@ -167,7 +169,7 @@ Not for the hackathon. Capture for after-submission planning.
 | `cargo build-sbf: privilege not held` | Dev Mode off | Enable Dev Mode + restart terminal |
 | `anchor build` finishes but no `target/idl/tide.json` | Build failed silently mid-compile | Check `cargo check` first; look for warnings about deprecated APIs |
 | `Program Id mismatch` after deploy | Stale `target/deploy/tide-keypair.json` | Delete `target/deploy/`, regenerate, rebuild, redeploy |
-| `Account not found` on init_pool | USDC mint pubkey wrong for cluster | Verify `USDC_MINT_DEVNET` in `lib/constants.ts` matches the deployed test mint (`4YhohVQ8RmudchbAe2UBXcrdduVYkuqyU7hHviz2MSvT`) |
+| `Account not found` on init_pool | USDC mint pubkey wrong for cluster | Verify `USDC_MINT_DEVNET` in `lib/constants.ts` matches the deployed test mint (`BKQ9HAzw2rnfUXpm6BKz2yvH4ikwKhC8dkgt73A8LTSh`) |
 | `mint_test_usdc` reverts with `Custom(4)` (OwnerMismatch) | Connected wallet isn't the mint authority | Reconnect with the wallet you passed to `spl-token create-token --mint-authority` |
 | `init_window` fails with `Pool not initialized` | UI cached pool=null | Hard-refresh browser; `usePool()` resubscribes on mount |
 | Frontend HTTP 500 with `Can't resolve '@solana-program/memo'` | Privy peer dep missing | `npm i @solana-program/memo --legacy-peer-deps` |

@@ -105,33 +105,72 @@ function buildKeyframes(side: "left" | "right", phase: number): string {
 
 const SPLINES = "0.4 0 0.6 1; 0.4 0 0.6 1; 0.4 0 0.6 1; 0.4 0 0.6 1; 0.4 0 0.6 1; 0.4 0 0.6 1";
 
-/** Flame tongue paths — thin vertical spikes that lick upward from the
- *  top edge of the eye. Each tongue morphs through 4 keyframes where
- *  the tip wiggles + height pulses. Pre-computed at module level. */
-function tongueKeyframes(amplitude: number, height: number): string {
-  const frames = [0, 1, 2, 3].map((i) => {
-    const wiggle = Math.sin(i * 1.7) * amplitude;
-    const h = height * (0.7 + Math.sin(i * 2.3) * 0.3); // height pulses
-    return [
-      `M ${-6} 0`,
-      `Q ${-3 + wiggle * 0.4} ${-h * 0.4}, ${wiggle} ${-h}`,
-      `Q ${3 + wiggle * 0.4} ${-h * 0.4}, ${6} 0`,
-      `Z`,
-    ].join(" ");
+/** Build one flame frame — asymmetric, organic shape with multiple
+ *  bezier control points. NOT a triangle — left and right sides have
+ *  independent bulges, the tip curls left or right based on `curl`,
+ *  the base is wider than the tip. Eight control points total per
+ *  silhouette so the curve reads as soft fire, not a polygon. */
+function flameFrame(opts: {
+  width: number;
+  height: number;
+  curl: number;        // -1..1 — tip horizontal offset / curl direction
+  leftBulge: number;   // 0..1 — height of left-side bulge
+  rightBulge: number;
+  taper: number;       // 0..1 — how much narrower the upper body is vs base
+}): string {
+  const { width: w, height: h, curl, leftBulge, rightBulge, taper } = opts;
+  const tipX = curl * 6;
+  const leftBulgeX = -w * (1.2 + Math.abs(curl) * 0.3);
+  const rightBulgeX = w * (1.2 + Math.abs(curl) * 0.3);
+  const upperLeftX = -w * taper + curl * 3;
+  const upperRightX = w * taper + curl * 3;
+  const lbY = -h * leftBulge;
+  const rbY = -h * rightBulge;
+
+  return [
+    // Base left
+    `M ${-w} 0`,
+    // Left side: base → bulge → upper body → near tip
+    `C ${leftBulgeX} ${lbY * 0.6}, ${leftBulgeX} ${lbY}, ${upperLeftX - 1} ${-h * 0.65}`,
+    `C ${upperLeftX - 2 + curl * 2} ${-h * 0.8}, ${tipX - w * 0.5} ${-h * 0.95}, ${tipX} ${-h}`,
+    // Right side back down: tip → near tip → upper body → bulge → base
+    `C ${tipX + w * 0.5} ${-h * 0.95}, ${upperRightX + 2 + curl * 2} ${-h * 0.8}, ${upperRightX + 1} ${-h * 0.65}`,
+    `C ${rightBulgeX} ${rbY}, ${rightBulgeX} ${rbY * 0.6}, ${w} 0`,
+    `Z`,
+  ].join(" ");
+}
+
+/** Build a sequence of flame frames with varying curl + bulges to
+ *  produce an asymmetric flickering animation. Tip curls alternate
+ *  direction so the flame "reaches" left, then right, then left. */
+function flameKeyframeSet(seed: number): string {
+  const frames = [0, 1, 2, 3, 4].map((i) => {
+    const t = (i + seed) * 0.7;
+    return flameFrame({
+      width: 7 + Math.sin(t * 1.3) * 1,
+      height: 28 + Math.sin(t * 0.9) * 6,
+      curl: Math.sin(t * 1.7) * 0.6 + Math.cos(t * 2.1) * 0.3,
+      leftBulge: 0.32 + Math.sin(t * 1.1) * 0.18,
+      rightBulge: 0.32 + Math.cos(t * 1.4) * 0.18,
+      taper: 0.45 + Math.sin(t * 0.8) * 0.15,
+    });
   });
   return frames.concat(frames[0]).join(";");
 }
 
+// Pre-computed flame frame sets — different seeds give each tongue a
+// unique flicker pattern so they never animate in lockstep.
 const TONGUE_KEYFRAMES = [
-  tongueKeyframes(3, 26),
-  tongueKeyframes(5, 32),
-  tongueKeyframes(2, 22),
-  tongueKeyframes(6, 36),
-  tongueKeyframes(3, 28),
-  tongueKeyframes(4, 30),
+  flameKeyframeSet(0),
+  flameKeyframeSet(1.3),
+  flameKeyframeSet(2.7),
+  flameKeyframeSet(4.1),
+  flameKeyframeSet(5.5),
+  flameKeyframeSet(7.0),
+  flameKeyframeSet(8.4),
 ];
 
-const TONGUE_SPLINES = "0.4 0 0.6 1; 0.4 0 0.6 1; 0.4 0 0.6 1; 0.4 0 0.6 1";
+const TONGUE_SPLINES = "0.4 0 0.6 1; 0.4 0 0.6 1; 0.4 0 0.6 1; 0.4 0 0.6 1; 0.4 0 0.6 1";
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
@@ -185,6 +224,27 @@ export function PredatorEyes() {
               <feMergeNode />
               <feMergeNode in="SourceGraphic" />
             </feMerge>
+          </filter>
+
+          {/* Soft-fire blur: combines the source path with a wider
+              gaussian-blurred copy underneath. Result reads as a plasma
+              flame with bright core + soft halo, not a hard-edged
+              polygon. Critical for "kobaran api" feel — without it the
+              tongue paths look like cut-out triangles. */}
+          <filter id="fire-soft" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="1.4" result="blurred" />
+            <feMerge>
+              <feMergeNode in="blurred" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+
+          {/* Heavy blur for outer flame halo */}
+          <filter id="fire-glow" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="4" />
+            <feComponentTransfer>
+              <feFuncA type="linear" slope="0.7" />
+            </feComponentTransfer>
           </filter>
 
           <linearGradient id="iris-grad" x1="0" y1="0" x2="0" y2="1">
@@ -342,32 +402,86 @@ const FlameTongues = memo(function FlameTongues({
   ];
   return (
     <g>
-      {tongues.map((t, i) => (
-        <g key={i} transform={`translate(${t.x}, ${t.baseY}) scale(${t.scale})`}>
-          <path
-            d={TONGUE_KEYFRAMES[t.kf].split(";")[0]}
-            fill="url(#tongue-grad)"
-            opacity="0.85"
+      {tongues.map((t, i) => {
+        const initialPath = TONGUE_KEYFRAMES[t.kf].split(";")[0];
+        return (
+          <g
+            key={i}
+            transform={`translate(${t.x}, ${t.baseY}) scale(${t.scale})`}
           >
-            <animate
-              attributeName="d"
-              values={TONGUE_KEYFRAMES[t.kf]}
-              dur={t.dur}
-              begin={t.delay}
-              repeatCount="indefinite"
-              calcMode="spline"
-              keySplines={TONGUE_SPLINES}
-            />
-            <animate
-              attributeName="opacity"
-              values="0.4;0.95;0.6;0.9;0.4"
-              dur={t.dur}
-              begin={t.delay}
-              repeatCount="indefinite"
-            />
-          </path>
-        </g>
-      ))}
+            {/* Soft halo — heavily blurred copy of the same flame path
+                renders as a glowing aura around the tongue. Animated in
+                lockstep with the core. */}
+            <path
+              d={initialPath}
+              fill="#06b6d4"
+              opacity="0.55"
+              filter="url(#fire-glow)"
+            >
+              <animate
+                attributeName="d"
+                values={TONGUE_KEYFRAMES[t.kf]}
+                dur={t.dur}
+                begin={t.delay}
+                repeatCount="indefinite"
+                calcMode="spline"
+                keySplines={TONGUE_SPLINES}
+              />
+            </path>
+            {/* Core flame body — gradient fill cyan-base → white tip,
+                soft-fire blur (small std-dev) makes the edge plasma-soft
+                instead of polygon-crisp. */}
+            <path
+              d={initialPath}
+              fill="url(#tongue-grad)"
+              filter="url(#fire-soft)"
+              opacity="0.95"
+            >
+              <animate
+                attributeName="d"
+                values={TONGUE_KEYFRAMES[t.kf]}
+                dur={t.dur}
+                begin={t.delay}
+                repeatCount="indefinite"
+                calcMode="spline"
+                keySplines={TONGUE_SPLINES}
+              />
+              <animate
+                attributeName="opacity"
+                values="0.5;1;0.7;0.95;0.5"
+                dur={t.dur}
+                begin={t.delay}
+                repeatCount="indefinite"
+              />
+            </path>
+            {/* Hot-bright core — small white path inside, narrower &
+                slightly shorter, reads as the brightest plasma center. */}
+            <path
+              d={initialPath}
+              fill="#ecfeff"
+              opacity="0.4"
+              transform="scale(0.55, 0.85)"
+            >
+              <animate
+                attributeName="d"
+                values={TONGUE_KEYFRAMES[t.kf]}
+                dur={t.dur}
+                begin={t.delay}
+                repeatCount="indefinite"
+                calcMode="spline"
+                keySplines={TONGUE_SPLINES}
+              />
+              <animate
+                attributeName="opacity"
+                values="0.2;0.7;0.3;0.6;0.2"
+                dur={t.dur}
+                begin={t.delay}
+                repeatCount="indefinite"
+              />
+            </path>
+          </g>
+        );
+      })}
     </g>
   );
 });

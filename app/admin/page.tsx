@@ -30,6 +30,8 @@ import { ReflectStakeButton } from "@/components/reflect-stake-button";
 import { SquadsCreateButton } from "@/components/squads-create-button";
 import { PythOracleCard } from "@/components/pyth-oracle-card";
 import { PrivyVerifyButton } from "@/components/privy-verify-button";
+import { ArciumProbeCard } from "@/components/arcium-probe-card";
+import { MoonPayStatusCard } from "@/components/moonpay-status-card";
 
 export default function AdminPage() {
   const { connection } = useConnection();
@@ -488,6 +490,10 @@ export default function AdminPage() {
       <RaydiumQuoteCard />
 
       <PythOracleCard />
+
+      <ArciumProbeCard />
+
+      <MoonPayStatusCard />
 
       <ActionCard
         title="trigger_aggregate"

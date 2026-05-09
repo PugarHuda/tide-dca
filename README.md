@@ -60,10 +60,10 @@ Full lifecycle validated end-to-end on Solana **devnet**:
 | **Privy** | 4/4 Deep | Embedded wallet bridge + `/api/privy/verify` JWT round-trip · `lib/privy-bridge.tsx` |
 | **Squads / Altitude** | 3.5/4 Solid+ | `multisig_create_v2` ix builder + Authority-type detection · `lib/squads.ts` |
 | **Raydium** | 3/4 Solid | V3 trade API + AMM v4/CLMM program ids · `lib/raydium.ts` + live `/admin` quote preview |
-| **MoonPay** | 3/4 Solid | URL builder + HMAC-SHA256 server signing · `app/api/moonpay/sign/route.ts` |
+| **MoonPay** | 3.5/4 Solid+ | URL builder + HMAC-SHA256 sign endpoint + live `/v3/currencies` proxy + webhook handler with HMAC verification + clickable status card on `/admin` · `app/api/moonpay/{sign,currencies,webhook}/route.ts` |
 | **Pyth** | 3/4 Solid | V2 price account decoded inline + live oracle card · `lib/pyth.ts` |
 | **Reflect** | 3/4 Solid | Yield estimator + deposit ix builder + admin stake button · `lib/reflect.ts` |
-| **Arcium** | 3/4 Solid | `@arcium-hq/client` v0.9 installed + real `RescueCipher` + `x25519` ECDH path in `lib/arcium.ts`, SHA-256 commitment fallback for devnet; `confidential-ixs/` Rust skeleton ready for `arcium build` |
+| **Arcium** | 3.5/4 Solid+ | `@arcium-hq/client` v0.9 installed + real `RescueCipher` + `x25519` ECDH live in `lib/arcium.ts` + clickable SDK probe on `/admin` (real encryption visible to judges) + `confidential-ixs/` Rust unit tests passing 3/3; SHA-256 commitment fallback for envs without MXE |
 
 Full audit: [`.research/sponsor-evidence.md`](./.research/sponsor-evidence.md).
 

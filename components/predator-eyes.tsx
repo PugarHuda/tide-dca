@@ -309,14 +309,16 @@ const FlameLayers = memo(function FlameLayers({
   const basePath = felineEyePath(side);
   return (
     <g transform={`translate(${cx}, 130)`}>
-      {/* Outer flame — morphs slowly through 6 keyframes */}
+      {/* Outer halo — wide blurred stroke, reads as the cyan "aura"
+          surrounding a real flame. Heavy blur + thick stroke =
+          glowing fire ring around the eye outline. */}
       <path
-        className="flame-flow-out"
         d={basePath}
         fill="none"
         stroke="#67e8f9"
-        strokeWidth="2.6"
-        opacity="0.75"
+        strokeWidth="14"
+        opacity="0.4"
+        filter="url(#fire-glow)"
       >
         <animate
           attributeName="d"
@@ -328,14 +330,16 @@ const FlameLayers = memo(function FlameLayers({
         />
       </path>
 
-      {/* Mid flame — independent fast morph (phase-shifted keyframes) */}
+      {/* Mid plasma — wider stroke + soft blur reads as the
+          combustion zone immediately around the outline. */}
       <path
         className="flame-flow-mid"
         d={basePath}
         fill="none"
-        stroke="#06b6d4"
-        strokeWidth="1.8"
-        opacity="0.95"
+        stroke="#22d3ee"
+        strokeWidth="6"
+        opacity="0.7"
+        filter="url(#fire-soft)"
       >
         <animate
           attributeName="d"
@@ -347,68 +351,93 @@ const FlameLayers = memo(function FlameLayers({
         />
       </path>
 
-      {/* Sharp inner outline — undistorted, the "real" predator edge */}
+      {/* Inner fire stroke — sharper but still gradient-soft, the
+          burning edge that defines the silhouette. */}
       <path
+        className="flame-flow-out"
         d={basePath}
-        fill="rgba(8,30,40,0.3)"
+        fill="rgba(8,30,40,0.35)"
         stroke="#06b6d4"
-        strokeWidth="1.2"
-      />
+        strokeWidth="2.4"
+        opacity="0.95"
+      >
+        <animate
+          attributeName="d"
+          values={FLAME_FRAMES.outer[side]}
+          dur="2.4s"
+          repeatCount="indefinite"
+          calcMode="spline"
+          keySplines={SPLINES}
+        />
+      </path>
 
       {/* Iris fill */}
       <path d={felineIrisPath(side)} fill="url(#iris-grad)" opacity="0.32" />
 
-      {/* Hot-spot glow at top center — pulses brightness */}
-      <ellipse cx="0" cy="-44" rx="55" ry="22" fill="url(#hot-spot)">
-        <animate
-          attributeName="opacity"
-          values="0.45;0.85;0.55;0.95;0.45"
-          dur="1.6s"
-          repeatCount="indefinite"
-        />
-        <animate
-          attributeName="rx"
-          values="50;62;52;58;50"
-          dur="1.6s"
-          repeatCount="indefinite"
-        />
-      </ellipse>
+      {/* Bright core line — undistorted thin white stroke right on the
+          edge so the fire reads as "outline drawn in flame" */}
+      <path
+        d={basePath}
+        fill="none"
+        stroke="#ecfeff"
+        strokeWidth="0.8"
+        opacity="0.9"
+      />
 
-      {/* Flame tongues — vertical spikes that lick upward from top edge */}
-      <FlameTongues side={side} />
+      {/* Flame bursts — small flame petals popping OUTWARD perpendicular
+          to the outline at distributed points around the perimeter */}
+      <FlameBursts side={side} />
 
-      {/* Embers — many rising particles per eye */}
+      {/* Embers — rising particles from above the eye */}
       <Embers side={side} />
     </g>
   );
 });
 
-const FlameTongues = memo(function FlameTongues({
+const FlameBursts = memo(function FlameBursts({
   side,
 }: {
   side: "left" | "right";
 }) {
   const flip = side === "left" ? -1 : 1;
-  // 7 tongues distributed along the top edge of the eye, each with own
-  // animation phase + duration so they ripple independently.
+  // 14 flame petals distributed AROUND the entire eye outline, each
+  // pointing OUTWARD perpendicular to the outline tangent at its
+  // position. The eye outline becomes a fire silhouette — flames lick
+  // outward in every direction, not just upward.
+  //
+  // Positions hand-picked from the eye path geometry. Angles in
+  // degrees (0 = up, 90 = right, 180 = down). Sign flipped per side
+  // so the right-eye flames lean rightward and left-eye flames
+  // lean leftward.
   const tongues = [
-    { x: -85 * flip, baseY: -36, kf: 0, dur: "1.6s", delay: "0s",   scale: 0.8 },
-    { x: -55 * flip, baseY: -42, kf: 1, dur: "1.4s", delay: "0.3s", scale: 1.0 },
-    { x: -25 * flip, baseY: -46, kf: 2, dur: "1.7s", delay: "0.6s", scale: 1.1 },
-    { x:   5 * flip, baseY: -47, kf: 3, dur: "1.3s", delay: "0.9s", scale: 1.2 },
-    { x:  35 * flip, baseY: -45, kf: 4, dur: "1.5s", delay: "0.2s", scale: 1.0 },
-    { x:  70 * flip, baseY: -38, kf: 5, dur: "1.4s", delay: "0.5s", scale: 0.9 },
-    { x: 105 * flip, baseY: -28, kf: 0, dur: "1.6s", delay: "0.8s", scale: 0.7 },
+    // Top arc — flames pointing up
+    { x: -90 * flip, y: -28, angle: -30 * flip, kf: 0, dur: "1.4s", delay: "0s",   scale: 0.7 },
+    { x: -60 * flip, y: -42, angle: -15 * flip, kf: 1, dur: "1.6s", delay: "0.3s", scale: 0.9 },
+    { x: -25 * flip, y: -48, angle: -5  * flip, kf: 2, dur: "1.3s", delay: "0.5s", scale: 1.1 },
+    { x:  10 * flip, y: -49, angle:  0,         kf: 3, dur: "1.5s", delay: "0.8s", scale: 1.0 },
+    { x:  50 * flip, y: -46, angle:  10 * flip, kf: 4, dur: "1.7s", delay: "0.2s", scale: 1.0 },
+    { x:  90 * flip, y: -36, angle:  35 * flip, kf: 5, dur: "1.4s", delay: "0.6s", scale: 0.85 },
+    // Outer corner — flame pointing diagonally outward
+    { x: 125 * flip, y: -16, angle:  70 * flip, kf: 6, dur: "1.5s", delay: "0.4s", scale: 0.7 },
+    { x: 130 * flip, y:   0, angle:  95 * flip, kf: 0, dur: "1.6s", delay: "1.0s", scale: 0.75 },
+    // Bottom arc — flames pointing down-outward
+    { x: 100 * flip, y:  20, angle: 130 * flip, kf: 1, dur: "1.4s", delay: "0.7s", scale: 0.7 },
+    { x:  60 * flip, y:  28, angle: 160 * flip, kf: 2, dur: "1.5s", delay: "0.1s", scale: 0.8 },
+    { x:  10 * flip, y:  29, angle: 180,        kf: 3, dur: "1.6s", delay: "0.9s", scale: 0.85 },
+    { x: -40 * flip, y:  27, angle: 195 * flip, kf: 4, dur: "1.3s", delay: "0.3s", scale: 0.7 },
+    { x: -85 * flip, y:  18, angle: 225 * flip, kf: 5, dur: "1.7s", delay: "0.6s", scale: 0.75 },
+    // Inner corner — flame pointing inward-down then upward
+    { x: -118 * flip, y:  6, angle: 265 * flip, kf: 6, dur: "1.5s", delay: "0.4s", scale: 0.65 },
   ];
   return (
     <g>
       {tongues.map((t, i) => {
         const initialPath = TONGUE_KEYFRAMES[t.kf].split(";")[0];
+        // translate to anchor on outline → rotate so tongue points
+        // OUTWARD perpendicular → scale per-position prominence
+        const transform = `translate(${t.x}, ${t.y}) rotate(${t.angle}) scale(${t.scale})`;
         return (
-          <g
-            key={i}
-            transform={`translate(${t.x}, ${t.baseY}) scale(${t.scale})`}
-          >
+          <g key={i} transform={transform}>
             {/* Soft halo — heavily blurred copy of the same flame path
                 renders as a glowing aura around the tongue. Animated in
                 lockstep with the core. */}

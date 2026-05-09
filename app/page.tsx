@@ -147,22 +147,22 @@ function Hero({
           windowNumber={windowNumber}
         />
         <h1 className="hero__h">
-          DCA without MEV.
+          We see the bots.
           <br />
-          <span className="hero__h-accent">Bots blind, retail wins.</span>
+          <span className="hero__h-accent">They can&apos;t see us.</span>
         </h1>
         <p className="hero__p">
-          Tide aggregates encrypted DCA orders inside Arcium MPC, then
-          settles the whole pool as one swap. No mempool footprint, no
-          sandwich. Slippage drops from{" "}
+          Tide hides every DCA buy inside an encrypted aggregate window.
+          Bots watching the mempool see one anonymous swap — never your
+          individual order. Slippage drops from{" "}
           <span className="mono" style={{ color: "var(--warn)" }}>
             ~0.50%
           </span>{" "}
-          to{" "}
+          solo to{" "}
           <span className="mono" style={{ color: "var(--accent)" }}>
             ~0.05%
-          </span>
-          .
+          </span>{" "}
+          pooled.
         </p>
         <div className="hero__cta">
           <Link href="/setup" className="btn btn--primary btn--lg">
@@ -207,13 +207,13 @@ function EyebrowTicker({
   const facts = useMemo(() => {
     const live = isLive
       ? participantCount > 0
-        ? `Window #${windowNumber.toString()} open · ${participantCount} ${participantCount === 1 ? "depositor" : "depositors"}`
-        : `Window #${windowNumber.toString()} open · waiting for first depositor`
-      : `Solana ${CURRENT_NETWORK} · awaiting first window`;
+        ? `Watching window #${windowNumber.toString()} · ${participantCount} ${participantCount === 1 ? "depositor" : "depositors"}`
+        : `Watching window #${windowNumber.toString()} · waiting for the first dive`
+      : `Solana ${CURRENT_NETWORK} · the tide is rising`;
     return [
       live,
-      "Encrypted intents · Arcium MPC layer",
-      "Single Jupiter swap · zero MEV surface",
+      "Encrypted by Arcium MPC · invisible to bots",
+      "One swap per window · no sandwich surface",
     ];
   }, [isLive, participantCount, windowNumber]);
 

@@ -3,43 +3,35 @@
 import { useEffect, useRef, useState } from "react";
 
 /**
- * Animated feline eyes — winged cat-eye shape (makeup-style) with
- * asymmetric sharp outer wing-tips, multi-layer flame outlines, and
- * decorative flame tendrils that lick outward from the wing tips.
+ * Animated feline predator eyes with flame outlines.
  *
- * Path is hand-built so the inner corner is a soft pointed tip and the
- * outer corner extends upward into a sharp winged-eyeliner flick. Each
- * eye is mirrored across the hero center axis (left eye = mirror of
- * right) so the wings face outward, like predator eyes catching light
- * from above.
+ * Animation strategy (rewritten — earlier filter-only approach didn't
+ * register as visible motion in many browsers because Chrome / Safari
+ * cache filter primitive outputs even when SMIL or React-state changes
+ * the seed attribute):
  *
- * Flame: TWO independent turbulence filters animate simultaneously —
- *   - flame-macro: slow + wide displacement (scale 22), drives the
- *     silhouette-level dance you read as "fire moving"
- *   - flame-micro: fast + tight displacement (scale 9), gives the edge
- *     a continuous shimmer that never repeats visibly
- * The result is a pseudo-random distortion that always looks alive.
+ *   1. Outline d morphs between 3 flame keyframes via SMIL <animate>.
+ *      Path-d animation is universally supported and never cached —
+ *      the silhouette VISIBLY ripples like fire.
+ *   2. Each flame stroke layer also pulses via CSS transform (scale +
+ *      skew) so the layers shift relative to each other. GPU-accelerated,
+ *      always renders.
+ *   3. Stroke-dashoffset on the outer flame stroke makes the dash pattern
+ *      "run" around the silhouette like fire flowing.
+ *   4. Six "ember" ovals rise + fade from the top of each eye via SMIL
+ *      animate on cy + opacity. Real upward motion makes the fire feel
+ *      alive even when other layers are subtle.
+ *   5. The static turbulence filter still adds a one-shot distortion to
+ *      the outer flame stroke, but it isn't the source of visible motion
+ *      anymore — just a texture.
  *
- * Tendrils: 4 short paths extending from each wing tip, also distorted
- * by the macro filter, with staggered opacity so they read as embers
- * trailing into the night sky.
+ * Cursor + scroll tracking on pupils preserved from earlier iterations.
  */
 export function PredatorEyes() {
   const ref = useRef<HTMLDivElement>(null);
   const [cursor, setCursor] = useState({ x: 0, y: 0 });
   const [scrollY, setScrollY] = useState(0);
   const [reduceMotion, setReduceMotion] = useState(false);
-
-  // Turbulence drivers — JS-driven instead of SVG SMIL because SMIL
-  // <animate> on feTurbulence's `seed` attribute does not consistently
-  // re-render across all browsers (Safari + Chrome cache the filter).
-  // requestAnimationFrame + React state forces a re-render on every
-  // tick so the noise pattern actually shifts. We update at ~24 fps
-  // (every ~42ms) — the motion reads as fire flicker without burning
-  // CPU at full 60 fps.
-  const [macroSeed, setMacroSeed] = useState(0);
-  const [microSeed, setMicroSeed] = useState(0);
-  const [macroFreqY, setMacroFreqY] = useState(0.055);
 
   useEffect(() => {
     const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -48,29 +40,6 @@ export function PredatorEyes() {
     mq.addEventListener("change", onChange);
     return () => mq.removeEventListener("change", onChange);
   }, []);
-
-  // Animation loop — guarantees feTurbulence re-evaluation each frame
-  useEffect(() => {
-    if (reduceMotion) return;
-    let raf = 0;
-    let lastTick = 0;
-    const tick = (now: number) => {
-      // Throttle to ~24fps to balance smoothness vs perf
-      if (now - lastTick > 42) {
-        lastTick = now;
-        // macro: slow random walk through seed space
-        setMacroSeed((s) => (s + 1.7) % 100);
-        // micro: faster random walk
-        setMicroSeed((s) => (s + 3.1) % 100);
-        // macro Y frequency: oscillate to make flame "breathe" vertically
-        const t = now * 0.001;
-        setMacroFreqY(0.05 + Math.sin(t * 0.9) * 0.02);
-      }
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [reduceMotion]);
 
   useEffect(() => {
     if (reduceMotion) return;
@@ -110,51 +79,26 @@ export function PredatorEyes() {
         style={{ display: "block", overflow: "visible" }}
       >
         <defs>
-          {/* Macro flame — large displacement, drives the silhouette
-              dance. Seed + Y frequency are React-driven so the noise
-              pattern actually re-renders each frame. */}
+          {/* Static turbulence — adds one-shot texture to the outer stroke,
+              not the source of motion anymore. */}
           <filter
-            id="flame-macro"
-            x="-60%"
-            y="-180%"
-            width="220%"
-            height="460%"
+            id="flame-tex"
+            x="-50%"
+            y="-150%"
+            width="200%"
+            height="400%"
           >
             <feTurbulence
               type="fractalNoise"
-              baseFrequency={`0.022 ${macroFreqY.toFixed(4)}`}
+              baseFrequency="0.025 0.07"
               numOctaves="2"
-              seed={macroSeed.toFixed(2)}
+              seed="7"
               result="t1"
             />
             <feDisplacementMap
               in="SourceGraphic"
               in2="t1"
-              scale="26"
-              xChannelSelector="R"
-              yChannelSelector="G"
-            />
-          </filter>
-
-          {/* Micro flame — fast tight shimmer on the edge */}
-          <filter
-            id="flame-micro"
-            x="-30%"
-            y="-80%"
-            width="160%"
-            height="260%"
-          >
-            <feTurbulence
-              type="fractalNoise"
-              baseFrequency="0.09 0.2"
-              numOctaves="3"
-              seed={microSeed.toFixed(2)}
-              result="t2"
-            />
-            <feDisplacementMap
-              in="SourceGraphic"
-              in2="t2"
-              scale="11"
+              scale="14"
               xChannelSelector="R"
               yChannelSelector="G"
             />
@@ -178,15 +122,11 @@ export function PredatorEyes() {
           </linearGradient>
 
           <radialGradient id="eye-halo" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor="#06b6d4" stopOpacity="0.3" />
-            <stop offset="55%" stopColor="#06b6d4" stopOpacity="0.07" />
+            <stop offset="0%" stopColor="#06b6d4" stopOpacity="0.35" />
+            <stop offset="55%" stopColor="#06b6d4" stopOpacity="0.08" />
             <stop offset="100%" stopColor="#06b6d4" stopOpacity="0" />
           </radialGradient>
 
-          {/* Per-eye clipPaths in LOCAL coordinate space (origin = eye center).
-              Each clipPath is referenced inside its eye's transform group so
-              the path coords align with the iris inset bowl. Pupil never
-              escapes the visible eye outline regardless of cursor position. */}
           <clipPath id="clip-eye-left" clipPathUnits="userSpaceOnUse">
             <path d={felineClipPath("left")} />
           </clipPath>
@@ -199,45 +139,73 @@ export function PredatorEyes() {
         <ellipse cx="220" cy="130" rx="200" ry="100" fill="url(#eye-halo)" />
         <ellipse cx="540" cy="130" rx="200" ry="100" fill="url(#eye-halo)" />
 
-        <FelineEye cx={220} side="left" px={px} py={py} />
-        <FelineEye cx={540} side="right" px={px} py={py} />
+        <FelineEye cx={220} side="left" px={px} py={py} animate={!reduceMotion} />
+        <FelineEye cx={540} side="right" px={px} py={py} animate={!reduceMotion} />
       </svg>
     </div>
   );
 }
 
 /**
- * Sharp feline eye path with explicit pointed corners. Geometry for
- * the RIGHT eye; LEFT mirrors x so each eye's outer corner points
- * away from the pair's center.
- *
- * Sharpness trick: straight L segments enter and leave each tip at
- * different angles, so the corner stays a true point. Smooth cubic
- * curves only fill the top + bottom arcs between the tips. This
- * survives the turbulence displacement filter — the inner sharp
- * outline reads clearly even when the outer flame layers smear.
- *
- * Proportions:
- *   - Width:height ≈ 3.4 : 1
- *   - Outer corner ~14px higher than inner (alert predator tilt)
- *   - Both tips meet the arcs at ~70° corner angles → pointed
+ * Sharp feline eye path. The "perturb" parameter applies tiny
+ * +/- offsets to the curve control points so we can generate distinct
+ * shape variants for the d-attribute SMIL animation keyframes.
  */
-function felineEyePath(side: "left" | "right"): string {
+function felineEyePath(
+  side: "left" | "right",
+  perturb: number[] = new Array(8).fill(0),
+): string {
   const flip = side === "left" ? -1 : 1;
   const X = (n: number) => n * flip;
+  // perturb[0..7] applied to non-corner control points so shape ripples
+  // but the sharp tips stay anchored
+  const p = perturb;
 
   return [
-    `M ${X(-118)} 6`,                                       // inner tip (sharp point)
-    `L ${X(-92)} ${-12}`,                                   // straight up-out from inner
-    `C ${X(-50)} ${-42}, ${X(20)} ${-50}, ${X(75)} ${-46}`,  // top apex curve
-    `C ${X(105)} ${-42}, ${X(122)} ${-30}, ${X(130)} ${-16}`, // approach outer
-    `L ${X(132)} ${-8}`,                                     // outer tip apex
-    `L ${X(124)} 2`,                                         // sharp turn at outer
-    `C ${X(108)} 18, ${X(55)} 28, ${X(0)} 28`,                // bottom arc
-    `C ${X(-55)} 26, ${X(-92)} 18, ${X(-104)} 14`,            // approach inner from below
-    `L ${X(-118)} 6`,                                         // close to inner tip
+    `M ${X(-118)} 6`,
+    `L ${X(-92)} ${-12}`,
+    `C ${X(-50 + p[0])} ${-42 + p[1]}, ${X(20 + p[2])} ${-50 + p[3]}, ${X(75)} ${-46}`,
+    `C ${X(105 + p[4])} ${-42 + p[5]}, ${X(122 + p[6])} ${-30 + p[7]}, ${X(130)} ${-16}`,
+    `L ${X(132)} ${-8}`,
+    `L ${X(124)} 2`,
+    `C ${X(108 - p[0])} ${18 + p[1]}, ${X(55 - p[2])} ${28 - p[3]}, ${X(0)} 28`,
+    `C ${X(-55 + p[4])} ${26 - p[5]}, ${X(-92 + p[6])} ${18 + p[7]}, ${X(-104)} 14`,
+    `L ${X(-118)} 6`,
     `Z`,
   ].join(" ");
+}
+
+function felineClipPath(side: "left" | "right"): string {
+  const flip = side === "left" ? -1 : 1;
+  const X = (n: number) => n * flip;
+  return [
+    `M ${X(-110)} 6`,
+    `L ${X(-86)} ${-10}`,
+    `C ${X(-46)} ${-38}, ${X(20)} ${-46}, ${X(72)} ${-42}`,
+    `C ${X(100)} ${-38}, ${X(116)} ${-26}, ${X(124)} ${-14}`,
+    `L ${X(125)} ${-7}`,
+    `L ${X(118)} 2`,
+    `C ${X(102)} 16, ${X(52)} 25, ${X(0)} 25`,
+    `C ${X(-52)} 23, ${X(-86)} 16, ${X(-98)} 12`,
+    `L ${X(-110)} 6`,
+    `Z`,
+  ].join(" ");
+}
+
+/** Generate flame keyframes for SMIL d-animation. Each frame perturbs
+ *  the path control points by small amounts so the silhouette ripples.
+ */
+function flameKeyframes(side: "left" | "right"): string {
+  const frames = [0, 1, 2, 3, 4].map((i) => {
+    const seed = i * 11;
+    const p = Array.from({ length: 8 }, (_, j) => {
+      const angle = (seed + j * 1.3) * 0.7;
+      return Math.sin(angle) * 4 + Math.cos(angle * 2.1) * 2;
+    });
+    return felineEyePath(side, p);
+  });
+  // Loop back to first frame for seamless restart
+  return frames.concat(frames[0]).join(";");
 }
 
 function FelineEye({
@@ -245,35 +213,61 @@ function FelineEye({
   side,
   px,
   py,
+  animate,
 }: {
   cx: number;
   side: "left" | "right";
   px: number;
   py: number;
+  animate: boolean;
 }) {
   const path = felineEyePath(side);
+  const morphFrames = flameKeyframes(side);
+
   return (
     <g transform={`translate(${cx}, 130)`}>
-      {/* Outer flame — slow distortion + CSS dashoffset running pattern */}
+      {/* Outer flame — d-animation morphs the silhouette continuously,
+          CSS class adds dashoffset running pattern + scale pulse. */}
       <path
         className="flame-flow-out"
         d={path}
         fill="none"
         stroke="#67e8f9"
-        strokeWidth="2.4"
-        filter="url(#flame-macro)"
-        opacity="0.6"
-      />
-      {/* Mid flame — fast distortion + reverse-direction running pattern */}
+        strokeWidth="2.6"
+        filter="url(#flame-tex)"
+        opacity="0.7"
+      >
+        {animate && (
+          <animate
+            attributeName="d"
+            values={morphFrames}
+            dur="2.2s"
+            repeatCount="indefinite"
+            calcMode="spline"
+            keySplines="0.4 0 0.6 1; 0.4 0 0.6 1; 0.4 0 0.6 1; 0.4 0 0.6 1; 0.4 0 0.6 1"
+          />
+        )}
+      </path>
+      {/* Mid flame — independent morph cycle (faster + offset phase) */}
       <path
         className="flame-flow-mid"
         d={path}
         fill="none"
         stroke="#06b6d4"
         strokeWidth="1.6"
-        filter="url(#flame-micro)"
-        opacity="0.9"
-      />
+        opacity="0.95"
+      >
+        {animate && (
+          <animate
+            attributeName="d"
+            values={flameKeyframesPhase(side, 0.35)}
+            dur="1.4s"
+            repeatCount="indefinite"
+            calcMode="spline"
+            keySplines="0.4 0 0.6 1; 0.4 0 0.6 1; 0.4 0 0.6 1; 0.4 0 0.6 1; 0.4 0 0.6 1"
+          />
+        )}
+      </path>
       {/* Sharp inner outline — undistorted, the "real" predator edge */}
       <path
         d={path}
@@ -282,11 +276,15 @@ function FelineEye({
         strokeWidth="1.2"
       />
 
-      {/* Iris — slightly inset feline path */}
+      {/* Iris fill */}
       <FelineIris side={side} />
 
-      {/* Pupil — vertical slit, tracks cursor, clipped to iris bowl
-          so it never escapes the visible eye outline. */}
+      {/* Embers — small ovals rising from the top of each eye, fading
+          out as they ascend. Real upward motion sells the "fire" feel
+          regardless of how the outline animation is rendering. */}
+      {animate && <Embers side={side} />}
+
+      {/* Pupil — vertical slit, tracks cursor, clipped to iris bowl */}
       <g clipPath={`url(#clip-eye-${side})`}>
         <g transform={`translate(${px}, ${py})`}>
           <ellipse
@@ -318,12 +316,23 @@ function FelineEye({
   );
 }
 
+/** Same flameKeyframes but with a phase offset so mid + outer flame
+ *  layers don't rip in lockstep — they shift relative to each other. */
+function flameKeyframesPhase(side: "left" | "right", phase: number): string {
+  const frames = [0, 1, 2, 3, 4].map((i) => {
+    const seed = (i + phase) * 11;
+    const p = Array.from({ length: 8 }, (_, j) => {
+      const angle = (seed + j * 1.7) * 0.5;
+      return Math.sin(angle) * 3 + Math.cos(angle * 1.9) * 1.5;
+    });
+    return felineEyePath(side, p);
+  });
+  return frames.concat(frames[0]).join(";");
+}
+
 function FelineIris({ side }: { side: "left" | "right" }) {
   const flip = side === "left" ? -1 : 1;
   const X = (n: number) => n * flip;
-  // Slightly inset version of the outline path — drives both the iris
-  // fill and the pupil clipPath. Inset ~6px so the iris doesn't bleed
-  // through the sharp outline stroke.
   const d = [
     `M ${X(-110)} 6`,
     `L ${X(-86)} ${-10}`,
@@ -339,20 +348,65 @@ function FelineIris({ side }: { side: "left" | "right" }) {
   return <path d={d} fill="url(#iris-grad)" opacity="0.32" />;
 }
 
-/** Same shape as FelineIris but exposed as a string for clipPath use. */
-function felineClipPath(side: "left" | "right"): string {
+/** Six embers per eye, each starting at a different x along the top
+ *  edge with a different delay. They rise (cy decreases) and fade
+ *  (opacity → 0) over a 2-2.5s cycle. SMIL <animate> on cy + opacity
+ *  is universally supported and never cached. */
+function Embers({ side }: { side: "left" | "right" }) {
   const flip = side === "left" ? -1 : 1;
-  const X = (n: number) => n * flip;
-  return [
-    `M ${X(-110)} 6`,
-    `L ${X(-86)} ${-10}`,
-    `C ${X(-46)} ${-38}, ${X(20)} ${-46}, ${X(72)} ${-42}`,
-    `C ${X(100)} ${-38}, ${X(116)} ${-26}, ${X(124)} ${-14}`,
-    `L ${X(125)} ${-7}`,
-    `L ${X(118)} 2`,
-    `C ${X(102)} 16, ${X(52)} 25, ${X(0)} 25`,
-    `C ${X(-52)} 23, ${X(-86)} 16, ${X(-98)} 12`,
-    `L ${X(-110)} 6`,
-    `Z`,
-  ].join(" ");
+  const seeds = [
+    { x: -60 * flip, delay: 0,    dur: 2.4, riseHi: 56, riseFar: 76 },
+    { x: -10 * flip, delay: 0.4,  dur: 2.6, riseHi: 60, riseFar: 84 },
+    { x:  30 * flip, delay: 0.8,  dur: 2.2, riseHi: 54, riseFar: 72 },
+    { x:  70 * flip, delay: 1.2,  dur: 2.5, riseHi: 58, riseFar: 80 },
+    { x: 100 * flip, delay: 0.2,  dur: 2.3, riseHi: 52, riseFar: 74 },
+    { x: -90 * flip, delay: 1.6,  dur: 2.4, riseHi: 62, riseFar: 82 },
+  ];
+  return (
+    <g>
+      {seeds.map((s, i) => (
+        <Ember key={i} {...s} />
+      ))}
+    </g>
+  );
+}
+
+function Ember({
+  x,
+  delay,
+  dur,
+  riseHi,
+  riseFar,
+}: {
+  x: number;
+  delay: number;
+  dur: number;
+  riseHi: number;
+  riseFar: number;
+}) {
+  return (
+    <ellipse cx={x} cy={-38} rx="1.6" ry="2.4" fill="#67e8f9" opacity="0">
+      <animate
+        attributeName="cy"
+        values={`-38;-${riseHi};-${riseFar}`}
+        dur={`${dur}s`}
+        begin={`${delay}s`}
+        repeatCount="indefinite"
+      />
+      <animate
+        attributeName="opacity"
+        values="0;0.85;0"
+        dur={`${dur}s`}
+        begin={`${delay}s`}
+        repeatCount="indefinite"
+      />
+      <animate
+        attributeName="rx"
+        values="1.6;1.2;0.6"
+        dur={`${dur}s`}
+        begin={`${delay}s`}
+        repeatCount="indefinite"
+      />
+    </ellipse>
+  );
 }

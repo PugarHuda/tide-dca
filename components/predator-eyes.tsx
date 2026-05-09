@@ -93,18 +93,29 @@ const SPLINES = "0.4 0 0.6 1; 0.4 0 0.6 1; 0.4 0 0.6 1; 0.4 0 0.6 1; 0.4 0 0.6 1
 export function PredatorEyes() {
   const ref = useRef<HTMLDivElement>(null);
   const [cursor, setCursor] = useState({ x: 0, y: 0 });
+  const [hovered, setHovered] = useState({ left: false, right: false });
   const [scrollY, setScrollY] = useState(0);
 
-  // Cursor tracking — throttled with requestAnimationFrame so React
-  // doesn't re-render on every pixel of mouse motion. State only
-  // updates ~once per frame (60fps cap), keeping the cursor-chase
-  // smooth without thrashing the rendering pipeline.
+  // Cursor tracking + per-eye hover detection. Ellipse hit-test in
+  // viewBox space (eye centers (220,130) and (540,130), bounds ~140×70).
+  // Throttled via requestAnimationFrame so dense mousemove events
+  // don't thrash React state.
   useEffect(() => {
     let rafId = 0;
-    let pending: { x: number; y: number } | null = null;
+    let pending: {
+      cursor: { x: number; y: number };
+      hovered: { left: boolean; right: boolean };
+    } | null = null;
     const flush = () => {
       rafId = 0;
-      if (pending) setCursor(pending);
+      if (pending) {
+        setCursor(pending.cursor);
+        setHovered((prev) =>
+          prev.left === pending!.hovered.left && prev.right === pending!.hovered.right
+            ? prev
+            : pending!.hovered,
+        );
+      }
       pending = null;
     };
     const onMove = (e: MouseEvent) => {
@@ -112,14 +123,27 @@ export function PredatorEyes() {
       const rect = ref.current.getBoundingClientRect();
       const cx = e.clientX - (rect.left + rect.width / 2);
       const cy = e.clientY - (rect.top + rect.height / 2);
+      // Cursor in viewBox coords for hover hit-test
+      const scaleVb = 760 / rect.width;
+      const vx = (e.clientX - rect.left) * scaleVb;
+      const vy = (e.clientY - rect.top) * (260 / rect.height);
+      const inEllipse = (eyeCx: number) => {
+        const dx = vx - eyeCx;
+        const dy = vy - 130;
+        return (dx * dx) / (140 * 140) + (dy * dy) / (60 * 60) < 1;
+      };
       pending = {
-        x: Math.max(-1, Math.min(1, cx / 500)),
-        y: Math.max(-1, Math.min(1, cy / 350)),
+        cursor: {
+          x: Math.max(-1, Math.min(1, cx / 500)),
+          y: Math.max(-1, Math.min(1, cy / 350)),
+        },
+        hovered: {
+          left: inEllipse(220),
+          right: inEllipse(540),
+        },
       };
       if (!rafId) rafId = requestAnimationFrame(flush);
     };
-    // Touch tracking — same handler shape for mobile devices, reads
-    // first touch point so the pupils still chase the user's finger.
     const onTouch = (e: TouchEvent) => {
       const t = e.touches[0];
       if (t) onMove({ clientX: t.clientX, clientY: t.clientY } as MouseEvent);
@@ -204,13 +228,23 @@ export function PredatorEyes() {
         <ellipse cx="220" cy="130" rx="200" ry="100" fill="url(#eye-halo)" />
         <ellipse cx="540" cy="130" rx="200" ry="100" fill="url(#eye-halo)" />
 
-        {/* Flame layers — memoized, never re-render on cursor/scroll */}
-        <FlameLayers cx={220} side="left" />
-        <FlameLayers cx={540} side="right" />
-
-        {/* Pupils — re-render freely on cursor/scroll */}
-        <Pupil cx={220} side="left" px={px} py={py} />
-        <Pupil cx={540} side="right" px={px} py={py} />
+        {/* Per-eye wink wrapper — re-renders on hover, applies static
+            scaleY when this eye is the one the cursor is hovering over.
+            Wraps both FlameLayers and Pupil so all eye contents close
+            together. The auto-blink runs INSIDE these on a separate
+            <g> so its SMIL timeline isn't restarted by hover changes. */}
+        <g
+          transform={`translate(220, 121)${hovered.left ? " scale(1, 0.04)" : ""}`}
+        >
+          <FlameLayers cx={0} side="left" />
+          <Pupil cx={0} side="left" px={px} py={py} />
+        </g>
+        <g
+          transform={`translate(540, 121)${hovered.right ? " scale(1, 0.04)" : ""}`}
+        >
+          <FlameLayers cx={0} side="right" />
+          <Pupil cx={0} side="right" px={px} py={py} />
+        </g>
       </svg>
     </div>
   );
@@ -237,15 +271,14 @@ const FlameLayers = memo(function FlameLayers({
   cx: number;
   side: "left" | "right";
 }) {
+  void cx; // parent now provides translate(cx, 121)
   const basePath = felineEyePath(side);
   return (
-    // Outer translate moves origin to (cx, 121), which is the eye's
-    // VERTICAL MIDLINE in viewBox coords (eye top y=-47, bottom y=28
-    // → midline y=-9.5 in local; → viewBox 130 + -9 ≈ 121). The
-    // animateTransform scale composes with this translate + scales
-    // around (0, 0) of this group, which is now the eye middle —
-    // squish hinges correctly.
-    <g transform={`translate(${cx}, 121)`}>
+    // Auto-blink wrapper — animates THIS group's transform via
+    // additive="sum" SMIL. Sits inside the per-eye wink wrapper from
+    // the caller so the wink's static scale doesn't restart this
+    // animation on hover toggles.
+    <g>
       <BlinkAnimate />
      <g transform="translate(0, 9)">
       {/* Stack of 6 morphing outlines — different phase + speed +
@@ -370,10 +403,10 @@ function Pupil({
   px: number;
   py: number;
 }) {
+  void cx; // parent provides translate(cx, 121) wink wrapper
   return (
-    // Same shifted-translate trick as FlameLayers so blink scale
-    // hinges on the eye's vertical midline.
-    <g transform={`translate(${cx}, 121)`}>
+    // Same auto-blink + content-shift structure as FlameLayers.
+    <g>
       <BlinkAnimate />
      <g transform="translate(0, 9)">
       <g clipPath={`url(#clip-eye-${side})`}>

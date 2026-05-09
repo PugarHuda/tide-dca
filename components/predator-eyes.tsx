@@ -89,17 +89,49 @@ const FLAME_FRAMES = {
 function buildKeyframes(side: "left" | "right", phase: number): string {
   const frames = [0, 1, 2, 3, 4, 5].map((i) => {
     const seed = (i + phase) * 11;
+    // Bias the perturbation upward — top control points jump more than
+    // bottom ones — so the silhouette dances more like a real flame
+    // (fire rises, doesn't slosh symmetrically).
     const p = Array.from({ length: 8 }, (_, j) => {
       const angle = (seed + j * 1.3) * 0.7;
-      return Math.sin(angle) * 5 + Math.cos(angle * 2.1) * 3;
+      const isTop = j < 4;
+      const amp = isTop ? 8 : 3;
+      return Math.sin(angle) * amp + Math.cos(angle * 2.1) * (amp * 0.6);
     });
     return felineEyePath(side, p);
   });
-  // Loop seamlessly back to first frame
   return frames.concat(frames[0]).join(";");
 }
 
 const SPLINES = "0.4 0 0.6 1; 0.4 0 0.6 1; 0.4 0 0.6 1; 0.4 0 0.6 1; 0.4 0 0.6 1; 0.4 0 0.6 1";
+
+/** Flame tongue paths — thin vertical spikes that lick upward from the
+ *  top edge of the eye. Each tongue morphs through 4 keyframes where
+ *  the tip wiggles + height pulses. Pre-computed at module level. */
+function tongueKeyframes(amplitude: number, height: number): string {
+  const frames = [0, 1, 2, 3].map((i) => {
+    const wiggle = Math.sin(i * 1.7) * amplitude;
+    const h = height * (0.7 + Math.sin(i * 2.3) * 0.3); // height pulses
+    return [
+      `M ${-6} 0`,
+      `Q ${-3 + wiggle * 0.4} ${-h * 0.4}, ${wiggle} ${-h}`,
+      `Q ${3 + wiggle * 0.4} ${-h * 0.4}, ${6} 0`,
+      `Z`,
+    ].join(" ");
+  });
+  return frames.concat(frames[0]).join(";");
+}
+
+const TONGUE_KEYFRAMES = [
+  tongueKeyframes(3, 26),
+  tongueKeyframes(5, 32),
+  tongueKeyframes(2, 22),
+  tongueKeyframes(6, 36),
+  tongueKeyframes(3, 28),
+  tongueKeyframes(4, 30),
+];
+
+const TONGUE_SPLINES = "0.4 0 0.6 1; 0.4 0 0.6 1; 0.4 0 0.6 1; 0.4 0 0.6 1";
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
@@ -160,6 +192,21 @@ export function PredatorEyes() {
             <stop offset="45%" stopColor="#06b6d4" />
             <stop offset="100%" stopColor="#083344" />
           </linearGradient>
+
+          {/* Flame tongue gradient — tip is white-hot, base is cyan.
+              Real fire reads bright at apex, denser/cooler at root. */}
+          <linearGradient id="tongue-grad" x1="0" y1="1" x2="0" y2="0">
+            <stop offset="0%"  stopColor="#06b6d4" stopOpacity="0.85" />
+            <stop offset="55%" stopColor="#67e8f9" stopOpacity="0.9" />
+            <stop offset="100%" stopColor="#ecfeff" stopOpacity="0.6" />
+          </linearGradient>
+
+          {/* Hot-spot glow for the central top of each eye */}
+          <radialGradient id="hot-spot" cx="50%" cy="50%" r="50%">
+            <stop offset="0%"  stopColor="#ecfeff" stopOpacity="0.9" />
+            <stop offset="40%" stopColor="#67e8f9" stopOpacity="0.4" />
+            <stop offset="100%" stopColor="#06b6d4" stopOpacity="0" />
+          </radialGradient>
 
           <radialGradient id="eye-halo" cx="50%" cy="50%" r="50%">
             <stop offset="0%" stopColor="#06b6d4" stopOpacity="0.4" />
@@ -251,22 +298,101 @@ const FlameLayers = memo(function FlameLayers({
       {/* Iris fill */}
       <path d={felineIrisPath(side)} fill="url(#iris-grad)" opacity="0.32" />
 
-      {/* Embers — six rising particles per eye */}
+      {/* Hot-spot glow at top center — pulses brightness */}
+      <ellipse cx="0" cy="-44" rx="55" ry="22" fill="url(#hot-spot)">
+        <animate
+          attributeName="opacity"
+          values="0.45;0.85;0.55;0.95;0.45"
+          dur="1.6s"
+          repeatCount="indefinite"
+        />
+        <animate
+          attributeName="rx"
+          values="50;62;52;58;50"
+          dur="1.6s"
+          repeatCount="indefinite"
+        />
+      </ellipse>
+
+      {/* Flame tongues — vertical spikes that lick upward from top edge */}
+      <FlameTongues side={side} />
+
+      {/* Embers — many rising particles per eye */}
       <Embers side={side} />
+    </g>
+  );
+});
+
+const FlameTongues = memo(function FlameTongues({
+  side,
+}: {
+  side: "left" | "right";
+}) {
+  const flip = side === "left" ? -1 : 1;
+  // 7 tongues distributed along the top edge of the eye, each with own
+  // animation phase + duration so they ripple independently.
+  const tongues = [
+    { x: -85 * flip, baseY: -36, kf: 0, dur: "1.6s", delay: "0s",   scale: 0.8 },
+    { x: -55 * flip, baseY: -42, kf: 1, dur: "1.4s", delay: "0.3s", scale: 1.0 },
+    { x: -25 * flip, baseY: -46, kf: 2, dur: "1.7s", delay: "0.6s", scale: 1.1 },
+    { x:   5 * flip, baseY: -47, kf: 3, dur: "1.3s", delay: "0.9s", scale: 1.2 },
+    { x:  35 * flip, baseY: -45, kf: 4, dur: "1.5s", delay: "0.2s", scale: 1.0 },
+    { x:  70 * flip, baseY: -38, kf: 5, dur: "1.4s", delay: "0.5s", scale: 0.9 },
+    { x: 105 * flip, baseY: -28, kf: 0, dur: "1.6s", delay: "0.8s", scale: 0.7 },
+  ];
+  return (
+    <g>
+      {tongues.map((t, i) => (
+        <g key={i} transform={`translate(${t.x}, ${t.baseY}) scale(${t.scale})`}>
+          <path
+            d={TONGUE_KEYFRAMES[t.kf].split(";")[0]}
+            fill="url(#tongue-grad)"
+            opacity="0.85"
+          >
+            <animate
+              attributeName="d"
+              values={TONGUE_KEYFRAMES[t.kf]}
+              dur={t.dur}
+              begin={t.delay}
+              repeatCount="indefinite"
+              calcMode="spline"
+              keySplines={TONGUE_SPLINES}
+            />
+            <animate
+              attributeName="opacity"
+              values="0.4;0.95;0.6;0.9;0.4"
+              dur={t.dur}
+              begin={t.delay}
+              repeatCount="indefinite"
+            />
+          </path>
+        </g>
+      ))}
     </g>
   );
 });
 
 const Embers = memo(function Embers({ side }: { side: "left" | "right" }) {
   const flip = side === "left" ? -1 : 1;
-  const seeds = [
-    { x: -60 * flip, delay: 0,    dur: 2.4, riseHi: 60, riseFar: 84 },
-    { x: -10 * flip, delay: 0.4,  dur: 2.6, riseHi: 64, riseFar: 92 },
-    { x:  30 * flip, delay: 0.8,  dur: 2.2, riseHi: 58, riseFar: 78 },
-    { x:  70 * flip, delay: 1.2,  dur: 2.5, riseHi: 62, riseFar: 86 },
-    { x: 100 * flip, delay: 0.2,  dur: 2.3, riseHi: 56, riseFar: 80 },
-    { x: -90 * flip, delay: 1.6,  dur: 2.4, riseHi: 66, riseFar: 88 },
-  ];
+  // 18 embers per eye, varied sizes/colors/speeds, with horizontal
+  // drift via cx animation so they don't rise straight (real sparks
+  // wobble in the heat plume).
+  const seeds = Array.from({ length: 18 }, (_, i) => {
+    // Distribute x positions across top edge of eye + some randomness
+    const baseX = (-100 + (i * 220) / 17) * flip;
+    const drift = ((i % 3) - 1) * 8 * flip; // left/center/right drift
+    return {
+      x: baseX,
+      driftX: baseX + drift,
+      delay: (i * 0.18) % 2.4,
+      dur: 1.8 + (i % 4) * 0.2,
+      riseHi: 56 + (i % 5) * 6,
+      riseFar: 80 + (i % 6) * 8,
+      rx: i % 3 === 0 ? 2.4 : i % 3 === 1 ? 1.8 : 1.2,
+      // Alternate between cyan and white-hot for color variety
+      fill: i % 4 === 0 ? "#ecfeff" : i % 4 === 1 ? "#a5f3fc" : "#67e8f9",
+    };
+  });
   return (
     <g>
       {seeds.map((s, i) => (
@@ -274,9 +400,9 @@ const Embers = memo(function Embers({ side }: { side: "left" | "right" }) {
           key={i}
           cx={s.x}
           cy={-38}
-          rx="2"
-          ry="3"
-          fill="#67e8f9"
+          rx={s.rx}
+          ry={s.rx * 1.5}
+          fill={s.fill}
           opacity="0"
         >
           <animate
@@ -287,15 +413,22 @@ const Embers = memo(function Embers({ side }: { side: "left" | "right" }) {
             repeatCount="indefinite"
           />
           <animate
+            attributeName="cx"
+            values={`${s.x};${s.driftX};${s.x - (s.driftX - s.x) * 0.5}`}
+            dur={`${s.dur}s`}
+            begin={`${s.delay}s`}
+            repeatCount="indefinite"
+          />
+          <animate
             attributeName="opacity"
-            values="0;1;0"
+            values="0;1;0.6;0"
             dur={`${s.dur}s`}
             begin={`${s.delay}s`}
             repeatCount="indefinite"
           />
           <animate
             attributeName="rx"
-            values="2;1.4;0.6"
+            values={`${s.rx};${s.rx * 0.7};0.4`}
             dur={`${s.dur}s`}
             begin={`${s.delay}s`}
             repeatCount="indefinite"

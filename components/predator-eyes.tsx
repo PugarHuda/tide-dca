@@ -30,6 +30,17 @@ export function PredatorEyes() {
   const [scrollY, setScrollY] = useState(0);
   const [reduceMotion, setReduceMotion] = useState(false);
 
+  // Turbulence drivers — JS-driven instead of SVG SMIL because SMIL
+  // <animate> on feTurbulence's `seed` attribute does not consistently
+  // re-render across all browsers (Safari + Chrome cache the filter).
+  // requestAnimationFrame + React state forces a re-render on every
+  // tick so the noise pattern actually shifts. We update at ~24 fps
+  // (every ~42ms) — the motion reads as fire flicker without burning
+  // CPU at full 60 fps.
+  const [macroSeed, setMacroSeed] = useState(0);
+  const [microSeed, setMicroSeed] = useState(0);
+  const [macroFreqY, setMacroFreqY] = useState(0.055);
+
   useEffect(() => {
     const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
     const onChange = () => setReduceMotion(mq.matches);
@@ -37,6 +48,29 @@ export function PredatorEyes() {
     mq.addEventListener("change", onChange);
     return () => mq.removeEventListener("change", onChange);
   }, []);
+
+  // Animation loop — guarantees feTurbulence re-evaluation each frame
+  useEffect(() => {
+    if (reduceMotion) return;
+    let raf = 0;
+    let lastTick = 0;
+    const tick = (now: number) => {
+      // Throttle to ~24fps to balance smoothness vs perf
+      if (now - lastTick > 42) {
+        lastTick = now;
+        // macro: slow random walk through seed space
+        setMacroSeed((s) => (s + 1.7) % 100);
+        // micro: faster random walk
+        setMicroSeed((s) => (s + 3.1) % 100);
+        // macro Y frequency: oscillate to make flame "breathe" vertically
+        const t = now * 0.001;
+        setMacroFreqY(0.05 + Math.sin(t * 0.9) * 0.02);
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [reduceMotion]);
 
   useEffect(() => {
     if (reduceMotion) return;
@@ -54,9 +88,6 @@ export function PredatorEyes() {
     return () => window.removeEventListener("mousemove", onMove);
   }, [reduceMotion]);
 
-  // Scroll listener — drives a subtle parallax + pupil "look down" as
-  // the user scrolls into the page. Makes the eyes feel anchored to
-  // the world but tracking the viewer's gaze.
   useEffect(() => {
     if (reduceMotion) return;
     const onScroll = () => setScrollY(window.scrollY);
@@ -65,10 +96,9 @@ export function PredatorEyes() {
     return () => window.removeEventListener("scroll", onScroll);
   }, [reduceMotion]);
 
-  // Pupil tracking: cursor + scroll-driven downward look (capped)
   const scrollNorm = Math.min(1, scrollY / 1200);
   const px = cursor.x * 22;
-  const py = cursor.y * 8 + scrollNorm * 6; // pupils glance down as user scrolls
+  const py = cursor.y * 8 + scrollNorm * 6;
 
   return (
     <div ref={ref} className="eyes" aria-hidden>
@@ -80,48 +110,33 @@ export function PredatorEyes() {
         style={{ display: "block", overflow: "visible" }}
       >
         <defs>
-          {/* Macro flame — bold silhouette dance, visible across scroll */}
+          {/* Macro flame — large displacement, drives the silhouette
+              dance. Seed + Y frequency are React-driven so the noise
+              pattern actually re-renders each frame. */}
           <filter
             id="flame-macro"
-            x="-50%"
-            y="-150%"
-            width="200%"
-            height="400%"
+            x="-60%"
+            y="-180%"
+            width="220%"
+            height="460%"
           >
             <feTurbulence
               type="fractalNoise"
-              baseFrequency="0.02 0.055"
+              baseFrequency={`0.022 ${macroFreqY.toFixed(4)}`}
               numOctaves="2"
-              seed="3"
+              seed={macroSeed.toFixed(2)}
               result="t1"
-            >
-              {!reduceMotion && (
-                <>
-                  <animate
-                    attributeName="seed"
-                    values="3;9;2;11;5;7;3"
-                    dur="1.6s"
-                    repeatCount="indefinite"
-                  />
-                  <animate
-                    attributeName="baseFrequency"
-                    values="0.02 0.055;0.035 0.085;0.015 0.04;0.02 0.055"
-                    dur="2.6s"
-                    repeatCount="indefinite"
-                  />
-                </>
-              )}
-            </feTurbulence>
+            />
             <feDisplacementMap
               in="SourceGraphic"
               in2="t1"
-              scale="18"
+              scale="26"
               xChannelSelector="R"
               yChannelSelector="G"
             />
           </filter>
 
-          {/* Micro flame — fast shimmer on the silhouette */}
+          {/* Micro flame — fast tight shimmer on the edge */}
           <filter
             id="flame-micro"
             x="-30%"
@@ -133,30 +148,13 @@ export function PredatorEyes() {
               type="fractalNoise"
               baseFrequency="0.09 0.2"
               numOctaves="3"
-              seed="5"
+              seed={microSeed.toFixed(2)}
               result="t2"
-            >
-              {!reduceMotion && (
-                <>
-                  <animate
-                    attributeName="seed"
-                    values="5;14;2;11;6;5"
-                    dur="0.8s"
-                    repeatCount="indefinite"
-                  />
-                  <animate
-                    attributeName="baseFrequency"
-                    values="0.09 0.2;0.13 0.28;0.07 0.18;0.09 0.2"
-                    dur="1.4s"
-                    repeatCount="indefinite"
-                  />
-                </>
-              )}
-            </feTurbulence>
+            />
             <feDisplacementMap
               in="SourceGraphic"
               in2="t2"
-              scale="7"
+              scale="11"
               xChannelSelector="R"
               yChannelSelector="G"
             />
@@ -256,23 +254,25 @@ function FelineEye({
   const path = felineEyePath(side);
   return (
     <g transform={`translate(${cx}, 130)`}>
-      {/* Outer flame — slow distortion, biggest spread, faint */}
+      {/* Outer flame — slow distortion + CSS dashoffset running pattern */}
       <path
+        className="flame-flow-out"
         d={path}
         fill="none"
         stroke="#67e8f9"
         strokeWidth="2.4"
         filter="url(#flame-macro)"
-        opacity="0.5"
+        opacity="0.6"
       />
-      {/* Mid flame — fast shimmer */}
+      {/* Mid flame — fast distortion + reverse-direction running pattern */}
       <path
+        className="flame-flow-mid"
         d={path}
         fill="none"
         stroke="#06b6d4"
         strokeWidth="1.6"
         filter="url(#flame-micro)"
-        opacity="0.85"
+        opacity="0.9"
       />
       {/* Sharp inner outline — undistorted, the "real" predator edge */}
       <path

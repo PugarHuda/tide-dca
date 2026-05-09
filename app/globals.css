@@ -1593,8 +1593,27 @@ textarea {
   0%, 100% { transform: scale(1); opacity: 0.95; }
   50%      { transform: scale(1.015); opacity: 1; }
 }
+
+/* Fire-flow — animates stroke-dashoffset along the eye outline so the
+   flame "runs" around the silhouette. GPU-accelerated CSS animation,
+   guaranteed visible even when feTurbulence filter caching is aggressive.
+   Two layers move in opposite directions for chaos. */
+.flame-flow-out {
+  stroke-dasharray: 26 18;
+  animation: fire-march 2.2s linear infinite;
+}
+.flame-flow-mid {
+  stroke-dasharray: 14 10;
+  animation: fire-march 1.1s linear infinite reverse;
+}
+@keyframes fire-march {
+  from { stroke-dashoffset: 0; }
+  to   { stroke-dashoffset: -44; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .eyes { animation: none; }
+  .flame-flow-out, .flame-flow-mid { animation: none; stroke-dasharray: none; }
 }
 @media (max-width: 600px) {
   .eyes { width: 96vw; }

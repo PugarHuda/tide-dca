@@ -1717,3 +1717,51 @@ textarea {
 .hero--minimal .hero__cta {
   justify-content: center;
 }
+
+/* ===================== Network warning banner ===================== */
+
+.net-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  margin: 0 auto 14px;
+  max-width: min(1200px, calc(100% - 32px));
+  background: var(--warn-soft);
+  border: 1px solid rgba(245, 158, 11, 0.32);
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--text-1);
+}
+.net-banner__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--warn);
+  box-shadow: 0 0 10px var(--warn);
+  flex-shrink: 0;
+}
+.net-banner__text {
+  flex: 1;
+  line-height: 1.5;
+}
+.net-banner__text strong {
+  color: var(--warn);
+  font-weight: 600;
+  text-transform: lowercase;
+}
+.net-banner__cta {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+@media (max-width: 700px) {
+  .net-banner {
+    flex-direction: column;
+    align-items: flex-start;
+    text-align: left;
+  }
+  .net-banner__cta {
+    align-self: stretch;
+    text-align: center;
+  }
+}

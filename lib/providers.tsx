@@ -53,7 +53,7 @@ import {
   SolflareWalletAdapter,
   TrustWalletAdapter,
 } from "@solana/wallet-adapter-wallets";
-import { PrivyProvider } from "@privy-io/react-auth";
+import { PrivyProvider, usePrivy } from "@privy-io/react-auth";
 
 import { CURRENT_NETWORK, RPC_URLS } from "./constants";
 import { PrivyEmbeddedBridge } from "./privy-bridge";
@@ -63,6 +63,7 @@ const PRIVY_APP_ID = process.env.NEXT_PUBLIC_PRIVY_APP_ID ?? "";
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000; // 24h
 const SESSION_KEY = "tide:wallet:connectedAt";
 const ADAPTER_STORAGE_KEY = "walletName"; // wallet-adapter default
+const PRIVY_SESSION_KEY = "tide:privy:connectedAt";
 
 /**
  * Sync the connected-at timestamp on every successful connect so the
@@ -76,6 +77,44 @@ function WalletSessionTimestampSync() {
       window.localStorage.setItem(SESSION_KEY, Date.now().toString());
     }
   }, [wallet.connected]);
+  return null;
+}
+
+/**
+ * Privy parity for the 24h session TTL. Privy sessions persist in their
+ * own storage (which we can't reach directly) but `usePrivy().logout()`
+ * tears them down. Pattern:
+ *   - On mount, after `ready`, check our stored timestamp. If expired,
+ *     call `logout()` so the user must re-authenticate
+ *   - On every `authenticated` flip to true, refresh the timestamp
+ *
+ * The `checked` guard prevents the expiry check from re-running and
+ * accidentally logging out a freshly authenticated session whose
+ * timestamp hadn't been written yet.
+ */
+function PrivySessionTimestampSync() {
+  const { authenticated, ready, logout } = usePrivy();
+  const [checked, setChecked] = useState(false);
+
+  useEffect(() => {
+    if (!ready || checked || typeof window === "undefined") return;
+    const ts = window.localStorage.getItem(PRIVY_SESSION_KEY);
+    if (authenticated && ts) {
+      const age = Date.now() - parseInt(ts, 10);
+      if (Number.isNaN(age) || age > SESSION_TTL_MS) {
+        window.localStorage.removeItem(PRIVY_SESSION_KEY);
+        void logout();
+      }
+    }
+    setChecked(true);
+  }, [ready, authenticated, logout, checked]);
+
+  useEffect(() => {
+    if (authenticated && typeof window !== "undefined") {
+      window.localStorage.setItem(PRIVY_SESSION_KEY, Date.now().toString());
+    }
+  }, [authenticated]);
+
   return null;
 }
 
@@ -144,6 +183,7 @@ export function Providers({ children }: { children: ReactNode }) {
         },
       }}
     >
+      <PrivySessionTimestampSync />
       <PrivyEmbeddedBridge>{inner}</PrivyEmbeddedBridge>
     </PrivyProvider>
   );

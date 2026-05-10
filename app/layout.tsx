@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 
 import { Providers } from "@/lib/providers";
 import { Nav } from "@/components/nav";
+import { NetworkBanner } from "@/components/network-banner";
 import { ToastProvider } from "@/components/toast";
 import "./globals.css";
 
@@ -58,6 +59,7 @@ export default function RootLayout({
           <ToastProvider>
             <div className="shell">
               <Nav />
+              <NetworkBanner />
               {children}
             </div>
           </ToastProvider>

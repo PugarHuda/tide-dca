@@ -347,8 +347,26 @@ function AccountMenu({
 }) {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  // Two-step disconnect: first click arms the confirm state, second
+  // click within 3s actually disconnects. Prevents accidental logout
+  // (user clicks the menu, scrolls, hand bumps the wrong row).
+  const [confirmDisconnect, setConfirmDisconnect] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const { solLamports, usdcLamports } = useUserBalances();
+
+  // Reset confirm state when menu closes so reopening doesn't show
+  // "Click again" stuck on the previous interaction.
+  useEffect(() => {
+    if (!open) setConfirmDisconnect(false);
+  }, [open]);
+
+  // Auto-disarm after 3s if user doesn't follow through. Without this
+  // the menu stays in confirm mode indefinitely once primed.
+  useEffect(() => {
+    if (!confirmDisconnect) return;
+    const t = setTimeout(() => setConfirmDisconnect(false), 3000);
+    return () => clearTimeout(t);
+  }, [confirmDisconnect]);
 
   useEffect(() => {
     if (!open) return;
@@ -454,12 +472,23 @@ function AccountMenu({
           <button
             className="acct__item acct__item--danger"
             onClick={() => {
-              setOpen(false);
-              onDisconnect();
+              if (confirmDisconnect) {
+                setOpen(false);
+                onDisconnect();
+              } else {
+                setConfirmDisconnect(true);
+              }
             }}
             role="menuitem"
+            aria-label={
+              confirmDisconnect
+                ? "Click again to confirm disconnect"
+                : "Disconnect wallet"
+            }
           >
-            <span>Disconnect</span>
+            <span>
+              {confirmDisconnect ? "Click again to confirm" : "Disconnect"}
+            </span>
           </button>
         </div>
       )}

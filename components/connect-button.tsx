@@ -43,11 +43,25 @@ import { TideMark } from "./tide-mark";
 import { useToast } from "./toast";
 import { useUserBalances } from "@/lib/hooks";
 import { formatSol, formatUsdc } from "@/lib/utils";
+import { CURRENT_NETWORK } from "@/lib/constants";
 
 const PRIVY_APP_ID = process.env.NEXT_PUBLIC_PRIVY_APP_ID ?? "";
 
+// Solana Explorer cluster query — empty for mainnet, suffix for others.
+// Centralized here so AccountMenu's "View on Explorer" link doesn't drift
+// out of sync with the active network.
+const EXPLORER_CLUSTER_PARAM =
+  CURRENT_NETWORK === "mainnet" ? "" : `?cluster=${CURRENT_NETWORK}`;
+
 export function ConnectButton() {
   const wallet = useWallet();
+  // Conditional hook is acceptable here: PRIVY_APP_ID is read from
+  // process.env at module-load and never changes during runtime, so
+  // the hook order is stable across all renders within a deployment.
+  // We can't unconditionally call usePrivy() because providers.tsx
+  // skips <PrivyProvider> entirely when PRIVY_APP_ID is unset, which
+  // would cause the hook to throw "PrivyProvider missing in tree".
+  // eslint-disable-next-line react-hooks/rules-of-hooks
   const privy = PRIVY_APP_ID ? usePrivy() : null;
   const toast = useToast();
   const [modalOpen, setModalOpen] = useState(false);
@@ -351,21 +365,42 @@ function AccountMenu({
   // click within 3s actually disconnects. Prevents accidental logout
   // (user clicks the menu, scrolls, hand bumps the wrong row).
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
+  // Track the auto-disarm timer so we can cancel it on menu close /
+  // re-arm. Without this, an in-flight timer from arm #1 fires after
+  // arm #2 starts and silently disarms the user mid-confirm.
+  const disarmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const { solLamports, usdcLamports } = useUserBalances();
 
   // Reset confirm state when menu closes so reopening doesn't show
-  // "Click again" stuck on the previous interaction.
+  // "Click again" stuck on the previous interaction. Cancel the
+  // pending disarm timer too — otherwise it fires after a future
+  // re-open and clobbers a freshly-armed confirm.
   useEffect(() => {
-    if (!open) setConfirmDisconnect(false);
+    if (!open) {
+      setConfirmDisconnect(false);
+      if (disarmTimerRef.current) {
+        clearTimeout(disarmTimerRef.current);
+        disarmTimerRef.current = null;
+      }
+    }
   }, [open]);
 
-  // Auto-disarm after 3s if user doesn't follow through. Without this
-  // the menu stays in confirm mode indefinitely once primed.
+  // Auto-disarm after 3s if user doesn't follow through. Storing the
+  // timer ID in a ref (instead of relying on the cleanup closure) lets
+  // sibling effects cancel it explicitly during menu close.
   useEffect(() => {
     if (!confirmDisconnect) return;
-    const t = setTimeout(() => setConfirmDisconnect(false), 3000);
-    return () => clearTimeout(t);
+    disarmTimerRef.current = setTimeout(
+      () => setConfirmDisconnect(false),
+      3000,
+    );
+    return () => {
+      if (disarmTimerRef.current) {
+        clearTimeout(disarmTimerRef.current);
+        disarmTimerRef.current = null;
+      }
+    };
   }, [confirmDisconnect]);
 
   useEffect(() => {
@@ -459,7 +494,7 @@ function AccountMenu({
           {fullAddress && (
             <a
               className="acct__item"
-              href={`https://explorer.solana.com/address/${fullAddress}?cluster=devnet`}
+              href={`https://explorer.solana.com/address/${fullAddress}${EXPLORER_CLUSTER_PARAM}`}
               target="_blank"
               rel="noreferrer"
               role="menuitem"

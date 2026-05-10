@@ -47,7 +47,7 @@ const LOW_BALANCE_THRESHOLD_LAMPORTS = 50_000_000n; // 0.05 SOL
 
 export function NetworkBanner() {
   const wallet = useWallet();
-  const { solLamports, loading } = useUserBalances();
+  const { solLamports, loading, solBalanceFresh } = useUserBalances();
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
@@ -55,6 +55,10 @@ export function NetworkBanner() {
   if (!wallet.publicKey || loading) return null;
   if (CURRENT_NETWORK === "mainnet" || CURRENT_NETWORK === "localnet")
     return null;
+  // Don't false-positive when the SOL balance fetch failed — a flaky
+  // RPC defaulting to 0 lamports would otherwise spam users with a
+  // "low balance" warning even when they have plenty.
+  if (!solBalanceFresh) return null;
   if (solLamports >= LOW_BALANCE_THRESHOLD_LAMPORTS) return null;
 
   const faucet = FAUCETS[CURRENT_NETWORK];

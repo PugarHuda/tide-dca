@@ -132,7 +132,10 @@ export function Providers({ children }: { children: ReactNode }) {
 
   // TTL-gated autoConnect. Default to false so SSR + first paint
   // never trigger a stealth reconnect; enable only after the post-mount
-  // effect confirms a fresh-enough session timestamp.
+  // effect confirms a fresh-enough session timestamp. WalletProvider's
+  // internal autoConnect effect has `[autoConnect, adapter, ...]` in
+  // its dep array, so the false → true flip is honored — the connect
+  // attempt fires once the prop arrives, even if it's after first render.
   const [autoConnectEnabled, setAutoConnectEnabled] = useState(false);
   useEffect(() => {
     if (typeof window === "undefined") return;

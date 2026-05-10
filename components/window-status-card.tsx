@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { formatUsdc } from "@/lib/utils";
+import { arciumConfigured } from "@/lib/arcium";
 
 interface WindowStatusProps {
   totalCommitted: bigint;
@@ -130,8 +131,14 @@ export function WindowStatusCard({
         className="tiny mute2"
         style={{ marginTop: 16, marginBottom: 0, lineHeight: 1.5 }}
       >
-        Individual amounts encrypted via Arcium MPC. Bots see only the
-        aggregate.
+        {arciumConfigured() ? (
+          <>Individual amounts encrypted via Arcium MPC. Bots see only the aggregate.</>
+        ) : (
+          <>
+            <strong style={{ color: "var(--warn)" }}>Commitment-fallback mode</strong>
+            : intent committed via SHA-256 hash. MXE deploy enables real MPC privacy.
+          </>
+        )}
       </p>
     </div>
   );

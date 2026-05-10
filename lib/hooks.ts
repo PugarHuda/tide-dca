@@ -261,28 +261,44 @@ export function useUserBalances(): {
   solLamports: bigint;
   usdcLamports: bigint;
   loading: boolean;
+  /** True iff the SOL balance fetch returned successfully at least once.
+   *  Distinguishes "wallet has 0 SOL" from "RPC error / not yet loaded".
+   *  Consumers like NetworkBanner use this to avoid false-positive
+   *  warnings when the balance fetch failed. */
+  solBalanceFresh: boolean;
 } {
   const { connection } = useConnection();
   const { publicKey } = useTideWallet();
   const [solLamports, setSolLamports] = useState<bigint>(0n);
   const [usdcLamports, setUsdcLamports] = useState<bigint>(0n);
   const [loading, setLoading] = useState(true);
+  const [solBalanceFresh, setSolBalanceFresh] = useState(false);
 
   useEffect(() => {
     if (!publicKey) {
       setSolLamports(0n);
       setUsdcLamports(0n);
+      setSolBalanceFresh(false);
       setLoading(false);
       return;
     }
     let cancelled = false;
     setLoading(true);
+    setSolBalanceFresh(false);
 
-    // SOL balance is on the wallet's own account
+    // SOL balance is on the wallet's own account. On RPC failure, leave
+    // solLamports at its previous value AND keep solBalanceFresh false
+    // so a flaky RPC doesn't render a fake "low balance" warning.
     connection
       .getBalance(publicKey, "confirmed")
-      .then((lamports) => !cancelled && setSolLamports(BigInt(lamports)))
-      .catch(() => !cancelled && setSolLamports(0n));
+      .then((lamports) => {
+        if (cancelled) return;
+        setSolLamports(BigInt(lamports));
+        setSolBalanceFresh(true);
+      })
+      .catch(() => {
+        // Stay at previous value, keep fresh flag false
+      });
 
     // USDC balance lives in the user's USDC ATA. We import lazily to keep
     // hot module deps small.
@@ -297,7 +313,10 @@ export function useUserBalances(): {
           setUsdcLamports(BigInt(balance.value.amount));
         }
       } catch {
-        // ATA might not exist yet — that's fine, balance is 0
+        // ATA might not exist yet — that's fine, balance is 0.
+        // We don't track freshness for USDC because "no ATA yet" is
+        // semantically equivalent to "0 balance", unlike SOL where
+        // every connected wallet has a SOL balance to query.
         if (!cancelled) setUsdcLamports(0n);
       } finally {
         if (!cancelled) setLoading(false);
@@ -306,8 +325,12 @@ export function useUserBalances(): {
     void loadUsdc();
 
     // Subscribe so balance refreshes after each tx (commit, claim, etc).
+    // The subscription delivers a successful update so flip fresh=true
+    // here too — this catches the case where the initial fetch failed
+    // but a subsequent tx pushes a real balance through.
     const solSubId = connection.onAccountChange(publicKey, (info) => {
       setSolLamports(BigInt(info.lamports));
+      setSolBalanceFresh(true);
     });
 
     return () => {
@@ -316,7 +339,7 @@ export function useUserBalances(): {
     };
   }, [connection, publicKey?.toBase58()]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return { solLamports, usdcLamports, loading };
+  return { solLamports, usdcLamports, loading, solBalanceFresh };
 }
 
 /**

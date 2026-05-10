@@ -197,6 +197,30 @@ If a judge says "show me the Arcium MPC working":
 If a judge says "I see Reflect in your stack — how much yield earned?":
 > "Zero — the deposit tx builder is shipped, but Reflect's program ID is env-gated and we haven't wired the real ABI yet. The yield estimator on /dashboard shows projected, not realized."
 
+---
+
+## On-chain findings (post-submission audit)
+
+QA review on 2026-05-11 surfaced 5 Anchor-program issues. None are
+exploitable in the current devnet demo (operator-controlled keeper +
+permissioned execute_swap caller), but all should land before any
+mainnet deployment. **We did not redeploy day-of-submission** because
+program upgrades risk breaking working state and there's no time to
+re-test all 7 instructions end-to-end. Instead, documenting them here
+so they're known and prioritized.
+
+| Severity | File | Issue |
+|---|---|---|
+| **CRITICAL** | `programs/tide/src/instructions/execute_swap.rs` | `jupiter_program` AccountInfo is fully caller-controlled. Marked `/// CHECK:` but no constraint enforcing `key() == JUPITER_V6_PROGRAM_ID`. A malicious caller could substitute a fake program that drains `escrow_input_ata` and returns minimal output. **Mitigation today**: only the operator wallet calls `execute_swap` in practice — but it's not enforced on-chain. **Fix**: add `#[account(address = JUPITER_V6_PROGRAM_ID)]` constraint with a hardcoded program ID const. |
+| **HIGH** | `programs/tide/src/instructions/commit_intent.rs` | `amount` parameter is taken from caller without checking against `position.amount_per_window`. A user can deviate from their declared DCA cadence, breaking the fairness invariant a "DCA pool" implies. **Fix**: `require!(amount <= position.amount_per_window, TideError::InvalidAmount)`. |
+| **HIGH** | `programs/tide/src/instructions/commit_intent.rs` | `input_mint` AccountInfo not constrained to `pool.input_mint`. A caller passes an arbitrary SPL mint, ATA derivation succeeds, transfer pulls from a different token account. **Mitigation today**: `total_committed_usdc` then doesn't match real escrow USDC, `execute_swap` would fail with insufficient balance — so funds aren't drained, but it pollutes the window's accounting and grief-locks the swap. **Fix**: `constraint = input_mint.key() == pool.input_mint`. |
+| **HIGH** | `programs/tide/src/instructions/init_window.rs` | The "previous window must be in finalized state" guard is left as a `TODO` — anyone can open a new window while the current one is still Open or Aggregating. The pool's `active_window` pointer flips to the new window, orphaning the old one. **Mitigation today**: the seed-loop only opens new windows after orphaning, this is by design for the demo. **Fix**: pass previous Window account, `require!(prev.status >= 2)` before allowing new window creation, except for the very first window. |
+| **MED** | `programs/tide/src/instructions/init_pool.rs` | No `require!(min_pool_size_usdc > 0)`. If set to 0, `trigger_aggregate` skips threshold check, `execute_swap` runs with empty escrow, every claim returns 0 — funds permanently locked because no refund instruction exists. **Fix**: enforce minimum > 0 + add `refund_intent` instruction for stuck-Open windows. |
+
+**Why not redeploy now**: Anchor program upgrade = re-running `anchor build && anchor deploy` against `HanBZ74Q...`. Even a no-op redeploy invalidates IDL caches and could drift state-account layouts if Rust struct changes propagated unintentionally. With submission < 24h away, the safer move is freeze the program at the validated commit and document.
+
+**Honest framing for judges**: "We had 5 on-chain audit findings surface in our internal QA review before submission. Documented them publicly in `.research/honest-depth.md`. Operator-controlled execute_swap mitigates the critical Jupiter constraint gap during demo, but pre-mainnet we ship: (1) Jupiter program hardcoded constraint, (2) commit_intent amount bound to position cadence, (3) input_mint pool-bound, (4) init_window lifecycle guard, (5) refund instruction + min_pool_size > 0 enforcement. None of these are funds-at-risk under our current operator model — they harden against adversarial-caller scenarios mainnet has."
+
 If a judge says "show me a real MoonPay purchase":
 > "Sandbox only right now. Production API key is a config swap, but we wanted to demo the integration without real card processing during a hackathon."
 

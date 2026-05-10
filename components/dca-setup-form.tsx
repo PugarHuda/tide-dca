@@ -7,6 +7,7 @@ import { submitSetupDcaPosition } from "@/lib/tide-actions";
 import { useToast } from "@/components/toast";
 import { usePool } from "@/lib/hooks";
 import { MoonPayButton } from "@/components/moonpay-button";
+import { arciumConfigured } from "@/lib/arcium";
 
 /**
  * DCA setup form. Submits setup_dca_position via lib/tide-actions.ts;
@@ -38,17 +39,39 @@ export function DcaSetupForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // Guard against empty / NaN inputs BEFORE the tx builder runs —
+    // BigInt(NaN) throws inside submitSetupDcaPosition without a
+    // matching toast, leaving the user with a button that briefly
+    // spun and then did nothing.
+    const amount = parseFloat(amountUsdc);
+    const slippagePct = parseFloat(maxSlippagePct);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      toast.error("Enter a positive USDC amount.");
+      return;
+    }
+    if (!Number.isFinite(slippagePct) || slippagePct < 0.1 || slippagePct > 10) {
+      toast.error("Slippage must be between 0.1% and 10%.");
+      return;
+    }
     setSubmitting(true);
     try {
       const out = await submitSetupDcaPosition(connection, wallet, {
-        amountPerWindowUsdc: parseFloat(amountUsdc),
-        maxSlippageBps: Math.round(parseFloat(maxSlippagePct) * 100),
+        amountPerWindowUsdc: amount,
+        maxSlippageBps: Math.round(slippagePct * 100),
       });
       if (out.ok) {
         toast.success("DCA position created", { explorerSig: out.signature });
       } else {
         toast.error(out.error);
       }
+    } catch (err) {
+      // Catch-all for unexpected throws (BigInt-on-NaN, RPC drop,
+      // wallet-popup rejection at the lower level). Without this the
+      // outer `finally` resets the spinner but the user sees no error
+      // signal — classic silent failure.
+      toast.error(
+        err instanceof Error ? err.message : "Failed to create DCA position",
+      );
     } finally {
       setSubmitting(false);
     }
@@ -296,8 +319,21 @@ export function DcaSetupForm() {
         className="tiny mute2"
         style={{ textAlign: "center", lineHeight: 1.5 }}
       >
-        Your individual amount is encrypted via Arcium MPC. Bots see only the
-        aggregate, never your specific buy.
+        {arciumConfigured() ? (
+          <>
+            Your individual amount is encrypted via Arcium MPC. Bots see only
+            the aggregate, never your specific buy.
+          </>
+        ) : (
+          <>
+            <strong style={{ color: "var(--warn)" }}>
+              Commitment-fallback mode
+            </strong>{" "}
+            on devnet — your intent is committed via SHA-256 hash. Real
+            RescueCipher MPC activates once the MXE program is deployed
+            (Linux/Mac CLI gate). On-chain interface is identical.
+          </>
+        )}
       </p>
     </form>
   );

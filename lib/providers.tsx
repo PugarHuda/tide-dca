@@ -12,14 +12,15 @@
  *      @solana/wallet-adapter-react-ui entirely (its styles clash with the
  *      design system; we only need the headless hooks).
  *
- *      Even though Wallet Standard handles modern wallets automatically,
- *      we ALSO instantiate explicit adapters from
- *      `@solana/wallet-adapter-wallets`. wallet-adapter dedupes when the
- *      same wallet registers both ways — this gives a fallback for
- *      wallets that haven't shipped Wallet Standard support yet (e.g.
- *      Ledger over USB), so the connect modal isn't empty for users who
- *      have Solflare/Backpack/etc. installed but those wallets haven't
- *      yet registered into the standard.
+ *      We instantiate explicit adapters ONLY for wallets that haven't
+ *      shipped Wallet Standard yet — currently just Ledger over USB.
+ *      Phantom (v24+), Solflare, Backpack, Coinbase, and Trust all
+ *      register themselves via Wallet Standard automatically; adding
+ *      legacy adapters for them creates a duplicate "NotDetected" row
+ *      because the legacy code paths (e.g. window.solana injection)
+ *      have been removed in favor of the Standard's namespaced approach.
+ *      Belt-and-suspenders was wrong here — Wallet Standard is now
+ *      authoritative for browser-extension Solana wallets.
  *
  *   2. Privy — handles email/social login for users who don't have a
  *      Solana wallet yet. Privy auto-creates an embedded Solana wallet on
@@ -46,13 +47,7 @@ import {
   WalletProvider,
   useWallet,
 } from "@solana/wallet-adapter-react";
-import {
-  CoinbaseWalletAdapter,
-  LedgerWalletAdapter,
-  PhantomWalletAdapter,
-  SolflareWalletAdapter,
-  TrustWalletAdapter,
-} from "@solana/wallet-adapter-wallets";
+import { LedgerWalletAdapter } from "@solana/wallet-adapter-wallets";
 import { PrivyProvider, usePrivy } from "@privy-io/react-auth";
 
 import { CURRENT_NETWORK, RPC_URLS } from "./constants";
@@ -121,20 +116,19 @@ function PrivySessionTimestampSync() {
 export function Providers({ children }: { children: ReactNode }) {
   const endpoint = useMemo(() => RPC_URLS[CURRENT_NETWORK], []);
 
-  // Explicit adapters cover wallets that haven't shipped Wallet
-  // Standard yet (notably Ledger). For Phantom/Solflare/etc. that
-  // DO ship Wallet Standard, wallet-adapter dedupes the entry so
-  // each wallet shows up exactly once in the modal.
-  const wallets = useMemo(
-    () => [
-      new PhantomWalletAdapter(),
-      new SolflareWalletAdapter(),
-      new CoinbaseWalletAdapter(),
-      new LedgerWalletAdapter(),
-      new TrustWalletAdapter(),
-    ],
-    [],
-  );
+  // Explicit adapters ONLY for wallets that haven't shipped Wallet
+  // Standard yet. Phantom (v24+), Solflare, Backpack, Coinbase, Trust
+  // all auto-register via Wallet Standard — adding them explicitly
+  // here would create duplicate entries in the modal where the legacy
+  // adapter shows as 'NotDetected' (because Phantom no longer injects
+  // window.solana, only window.phantom.solana via the Standard).
+  // Users would click the NotDetected row and get a misleading
+  // "not installed" toast. Belt-and-suspenders here was wrong:
+  // Wallet Standard is now authoritative for these wallets.
+  //
+  // Ledger USB stays — its hardware wallet flow doesn't fit the
+  // Standard's browser-injection model.
+  const wallets = useMemo(() => [new LedgerWalletAdapter()], []);
 
   // TTL-gated autoConnect. Default to false so SSR + first paint
   // never trigger a stealth reconnect; enable only after the post-mount

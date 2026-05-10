@@ -40,6 +40,7 @@ import {
 import { usePrivy } from "@privy-io/react-auth";
 
 import { TideMark } from "./tide-mark";
+import { useToast } from "./toast";
 import { useUserBalances } from "@/lib/hooks";
 import { formatSol, formatUsdc } from "@/lib/utils";
 
@@ -48,6 +49,7 @@ const PRIVY_APP_ID = process.env.NEXT_PUBLIC_PRIVY_APP_ID ?? "";
 export function ConnectButton() {
   const wallet = useWallet();
   const privy = PRIVY_APP_ID ? usePrivy() : null;
+  const toast = useToast();
   const [modalOpen, setModalOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
@@ -96,11 +98,33 @@ export function ConnectButton() {
         // select() still runs so the wallet-adapter context knows which
         // wallet is current; the adapter's connect/disconnect events
         // propagate state through the existing listeners regardless.
+        //
+        // Adapter not installed → bail with a helpful toast instead of
+        // silently failing. Wallet-adapter throws WalletNotReadyError
+        // for NotDetected adapters which used to land in console.warn
+        // only — users had no idea why nothing happened.
+        if (w.adapter.readyState === "NotDetected") {
+          setModalOpen(false);
+          const url = w.adapter.url || "https://solana.com/ecosystem/explore?categories=wallet";
+          toast.error(
+            `${w.adapter.name} not installed — open ${url} to install`,
+          );
+          return;
+        }
         setModalOpen(false);
         try {
           wallet.select(w.adapter.name);
           await w.adapter.connect();
         } catch (err) {
+          // User-rejected popups throw `WalletConnectionError`; we
+          // distinguish them so we don't badger with an error toast
+          // when the user just changed their mind.
+          const msg = err instanceof Error ? err.message : String(err);
+          if (/User rejected|user denied|rejected the request/i.test(msg)) {
+            toast.info(`${w.adapter.name} connection cancelled`);
+          } else {
+            toast.error(`${w.adapter.name} connect failed: ${msg.slice(0, 80)}`);
+          }
           console.warn(`[Tide] connect ${w.adapter.name} failed:`, err);
         }
       }}

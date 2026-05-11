@@ -14,16 +14,15 @@ import { CURRENT_NETWORK } from "@/lib/constants";
 // runtime resolves these correctly via the actual app/ directory; the
 // cast just satisfies the static typed-routes check.
 //
-// /admin intentionally NOT in the primary nav — it's the operator
-// console (mint test USDC, force-trigger aggregate, mark windows failed,
-// etc) and confusing for retail visitors who saw "Admin" alongside
-// "Setup / Dashboard". Operators bookmark /admin directly. Mobile drawer
-// includes a small operator-tools link so it's still reachable for the
-// people who know to look.
+// /admin restored to primary nav — operator needs quick access. Retail
+// visitors who click it see a clear "read-only" banner unless their
+// wallet matches pool.authority (gate added in app/admin/page.tsx), so
+// no confusion or accidental destructive actions.
 const LINKS: { href: Route; label: string }[] = [
   { href: "/demo" as Route, label: "Demo" },
   { href: "/setup" as Route, label: "Setup" },
   { href: "/dashboard" as Route, label: "Dashboard" },
+  { href: "/admin" as Route, label: "Admin" },
 ];
 
 export function Nav() {
@@ -108,16 +107,6 @@ export function Nav() {
               {it.label}
             </Link>
           ))}
-          {/* Operator console — mobile only, small/de-emphasized */}
-          <Link
-            href={"/admin" as Route}
-            className="nav__drawer-link"
-            data-active={pathname === "/admin"}
-            onClick={() => setMenuOpen(false)}
-            style={{ fontSize: 12, opacity: 0.6, marginTop: 8 }}
-          >
-            Operator console →
-          </Link>
         </div>
       )}
     </nav>

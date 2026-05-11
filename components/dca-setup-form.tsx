@@ -9,7 +9,8 @@ import {
   submitSetupDcaPosition,
 } from "@/lib/tide-actions";
 import { useToast } from "@/components/toast";
-import { usePool, useUserBalances } from "@/lib/hooks";
+import { usePool, useUserBalances, useUserPosition } from "@/lib/hooks";
+import { formatUsdc } from "@/lib/utils";
 import { MoonPayButton } from "@/components/moonpay-button";
 import { arciumConfigured } from "@/lib/arcium";
 import { CURRENT_NETWORK } from "@/lib/constants";
@@ -28,6 +29,7 @@ export function DcaSetupForm() {
   const wallet = useWallet();
   const toast = useToast();
   const { pool } = usePool();
+  const { position } = useUserPosition();
 
   const [amountUsdc, setAmountUsdc] = useState("50");
   const [maxSlippagePct, setMaxSlippagePct] = useState("1");
@@ -132,6 +134,65 @@ export function DcaSetupForm() {
       (standaloneSlippageEstimate - poolSlippageEstimate) *
       annualBuys) /
     100;
+
+  // Existing-position view: DcaPosition PDA is derived from [owner, pool]
+  // so the on-chain `init` constraint enforces 1 position per user per
+  // pool. If we let the form submit when position already exists, the
+  // tx reverts with PositionAlreadyExists and the user sees a cryptic
+  // 6005 error. Detect + redirect to dashboard instead.
+  if (position && !successSig) {
+    return (
+      <div
+        className="card"
+        style={{ display: "flex", flexDirection: "column", gap: 16, padding: 28 }}
+      >
+        <div>
+          <span className="eyebrow" style={{ color: "var(--accent)" }}>
+            ⓘ DCA position already exists
+          </span>
+          <h2 className="page__h2" style={{ marginTop: 8, fontSize: 22 }}>
+            You&apos;re already set up
+          </h2>
+          <p
+            className="muted"
+            style={{ marginTop: 10, lineHeight: 1.6, marginBottom: 0 }}
+          >
+            Your wallet has a DCA position on this pool with{" "}
+            <span className="mono" style={{ color: "var(--accent)" }}>
+              {formatUsdc(position.amountPerWindow)}
+            </span>{" "}
+            per window and{" "}
+            <span className="mono">
+              {(position.maxSlippageBps / 100).toFixed(1)}%
+            </span>{" "}
+            max slippage. Solana doesn&apos;t allow re-initializing the
+            same PDA — head to the dashboard to commit, claim, or pause.
+          </p>
+        </div>
+        <div className="flex" style={{ gap: 10, flexWrap: "wrap" }}>
+          <Link href="/dashboard" className="btn btn--primary">
+            View dashboard →
+          </Link>
+          <a
+            href={`https://explorer.solana.com/address/${position.owner.toBase58()}?cluster=${CURRENT_NETWORK}`}
+            target="_blank"
+            rel="noreferrer"
+            className="btn btn--ghost"
+          >
+            View on Explorer ↗
+          </a>
+        </div>
+        <p className="tiny mute2" style={{ margin: 0, lineHeight: 1.5 }}>
+          To change amount or slippage, the current MVP requires keeping
+          the on-chain position as-is and adjusting via behavior (commit
+          less / pause by not committing). A future <code className="mono">
+            update_dca_position
+          </code>{" "}
+          instruction lands post-mainnet.
+        </p>
+      </div>
+    );
+  }
 
   // Post-success view: swap the form for a clear "what's next" panel.
   // Mounted at the top of the return so user doesn't scroll past it.

@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+# Cancel in-progress runs when a new commit lands on the same branch.
+# Saves Actions minutes on rapid push cycles like a hackathon finalization.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  typescript:
+    name: TypeScript + Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+      - run: npm ci
+      - run: npx tsc --noEmit
+
+  rust:
+    name: confidential-ixs cargo test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: confidential-ixs
+      - name: cargo test
+        working-directory: confidential-ixs
+        run: cargo test --no-fail-fast
+
+  sponsor-qa:
+    name: Sponsor QA matrix (prod surfaces)
+    runs-on: ubuntu-latest
+    # Only run on master pushes — PRs from forks won't have prod URL access
+    # and probing third-party sponsor APIs from every PR is wasteful.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+      - run: npm ci
+      - name: Run sponsor probes against prod
+        run: node scripts/qa-sponsors.mjs --prod

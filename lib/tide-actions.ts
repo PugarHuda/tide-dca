@@ -476,6 +476,134 @@ export async function submitClaimAllocation(
   }
 }
 
+// ─── User: refund_intent ────────────────────────────────────────────────────
+//
+// User pulls their commit back from a Failed window. Mirror of
+// claim_allocation but for the input escrow (USDC) instead of the output
+// escrow (target token). Requires window.status == 3 (Failed) and
+// intent.claimed == false. After successful refund, intent.claimed is set
+// to true so a single intent can be either claimed (from Distributed) OR
+// refunded (from Failed), never both.
+
+export type RefundIntentParams = {
+  poolPda: PublicKey;
+  windowPda: PublicKey;
+};
+
+export async function submitRefundIntent(
+  connection: Connection,
+  wallet: SignerWallet,
+  params: RefundIntentParams,
+): Promise<SubmitResult> {
+  if (!wallet.publicKey) return { ok: false, error: "Wallet not connected" };
+  if (!wallet.sendTransaction)
+    return { ok: false, error: "Wallet does not support sendTransaction" };
+
+  const owner = wallet.publicKey;
+
+  const [intentPda] = findIntentPda(params.windowPda, owner);
+  const [escrowAuthority] = findEscrowAuthorityPda(params.windowPda);
+  const escrowInputAta = getAssociatedTokenAddressSync(
+    USDC_MINT,
+    escrowAuthority,
+    true,
+  );
+  const ownerInputAta = getAssociatedTokenAddressSync(USDC_MINT, owner);
+
+  // Idempotent ATA create in case user nuked theirs between commit and
+  // refund (rare but harmless).
+  const createAtaIx = createAssociatedTokenAccountIdempotentInstruction(
+    owner,
+    ownerInputAta,
+    owner,
+    USDC_MINT,
+  );
+
+  const refundIx = new TransactionInstruction({
+    programId: TIDE_PROGRAM_ID,
+    keys: [
+      { pubkey: owner, isSigner: true, isWritable: true },
+      { pubkey: USDC_MINT, isSigner: false, isWritable: false },
+      { pubkey: intentPda, isSigner: false, isWritable: true },
+      { pubkey: params.windowPda, isSigner: false, isWritable: false },
+      { pubkey: escrowInputAta, isSigner: false, isWritable: true },
+      { pubkey: escrowAuthority, isSigner: false, isWritable: false },
+      { pubkey: ownerInputAta, isSigner: false, isWritable: true },
+      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+    ],
+    data: discriminator("refund_intent"),
+  });
+
+  const tx = new Transaction()
+    .add(ComputeBudgetProgram.setComputeUnitLimit({ units: 100_000 }))
+    .add(createAtaIx)
+    .add(refundIx);
+
+  try {
+    const signature = await preflightAndSend(
+      connection,
+      wallet,
+      tx,
+      wallet.publicKey,
+    );
+    await connection.confirmTransaction(signature, "confirmed");
+    return {
+      ok: true,
+      signature,
+      poolPda: params.poolPda,
+      positionPda: intentPda,
+    };
+  } catch (err) {
+    return { ok: false, error: decodeAnchorError(err) };
+  }
+}
+
+// ─── Pool authority: mark_window_failed ─────────────────────────────────────
+//
+// Pool-authority-only. Transitions an Aggregating (status=1) window to
+// Failed (status=3) when execute_swap couldn't run — Jupiter has no route,
+// slippage breach, liquidity gap, etc. Unlocks refund_intent for every
+// participant. Strictly an escape hatch — happy path stays
+// Aggregating → execute_swap → Distributed.
+
+export async function submitMarkWindowFailed(
+  connection: Connection,
+  wallet: SignerWallet,
+  poolPda: PublicKey,
+  windowPda: PublicKey,
+): Promise<SubmitResult> {
+  if (!wallet.publicKey) return { ok: false, error: "Wallet not connected" };
+  if (!wallet.sendTransaction)
+    return { ok: false, error: "Wallet does not support sendTransaction" };
+
+  const ix = new TransactionInstruction({
+    programId: TIDE_PROGRAM_ID,
+    keys: [
+      { pubkey: wallet.publicKey, isSigner: true, isWritable: false },
+      { pubkey: poolPda, isSigner: false, isWritable: false },
+      { pubkey: windowPda, isSigner: false, isWritable: true },
+    ],
+    data: discriminator("mark_window_failed"),
+  });
+
+  const tx = new Transaction()
+    .add(ComputeBudgetProgram.setComputeUnitLimit({ units: 30_000 }))
+    .add(ix);
+
+  try {
+    const signature = await preflightAndSend(
+      connection,
+      wallet,
+      tx,
+      wallet.publicKey,
+    );
+    await connection.confirmTransaction(signature, "confirmed");
+    return { ok: true, signature, poolPda, positionPda: windowPda };
+  } catch (err) {
+    return { ok: false, error: decodeAnchorError(err) };
+  }
+}
+
 // ─── Operator: trigger_aggregate ─────────────────────────────────────────────
 //
 // Permissionless. Flips current window from status 0 (Open) to status 1

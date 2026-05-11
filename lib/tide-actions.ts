@@ -675,6 +675,53 @@ export async function submitCloseIntent(
   }
 }
 
+// ─── User: set_position_active (pause/resume DCA) ──────────────────────────
+
+export async function submitSetPositionActive(
+  connection: Connection,
+  wallet: SignerWallet,
+  poolPda: PublicKey,
+  active: boolean,
+): Promise<SubmitResult> {
+  if (!wallet.publicKey) return { ok: false, error: "Wallet not connected" };
+  if (!wallet.sendTransaction)
+    return { ok: false, error: "Wallet does not support sendTransaction" };
+
+  const owner = wallet.publicKey;
+  const [positionPda] = findDcaPositionPda(owner, poolPda);
+
+  // Anchor encodes booleans as 1-byte u8.
+  const argBuf = Buffer.alloc(1);
+  argBuf.writeUInt8(active ? 1 : 0, 0);
+  const data = Buffer.concat([discriminator("set_position_active"), argBuf]);
+
+  const ix = new TransactionInstruction({
+    programId: TIDE_PROGRAM_ID,
+    keys: [
+      { pubkey: owner, isSigner: true, isWritable: false },
+      { pubkey: positionPda, isSigner: false, isWritable: true },
+    ],
+    data,
+  });
+
+  const tx = new Transaction()
+    .add(ComputeBudgetProgram.setComputeUnitLimit({ units: 30_000 }))
+    .add(ix);
+
+  try {
+    const signature = await preflightAndSend(
+      connection,
+      wallet,
+      tx,
+      wallet.publicKey,
+    );
+    await connection.confirmTransaction(signature, "confirmed");
+    return { ok: true, signature, poolPda, positionPda };
+  } catch (err) {
+    return { ok: false, error: decodeAnchorError(err) };
+  }
+}
+
 // ─── Operator: trigger_aggregate ─────────────────────────────────────────────
 //
 // Permissionless. Flips current window from status 0 (Open) to status 1

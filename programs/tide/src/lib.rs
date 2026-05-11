@@ -104,4 +104,15 @@ pub mod tide {
     pub fn close_intent(ctx: Context<CloseIntent>) -> Result<()> {
         instructions::close_intent::handler(ctx)
     }
+
+    /// User pauses (active=false) or resumes (active=true) their DCA
+    /// position. The `commit_intent` handler already gates on
+    /// `position.active`, so pausing immediately stops future commits.
+    /// No funds move; cumulative stats stay intact.
+    pub fn set_position_active(
+        ctx: Context<SetPositionActive>,
+        active: bool,
+    ) -> Result<()> {
+        instructions::set_position_active::handler(ctx, active)
+    }
 }

@@ -6,6 +6,7 @@ pub mod init_pool;
 pub mod init_window;
 pub mod mark_window_failed;
 pub mod refund_intent;
+pub mod set_position_active;
 pub mod setup_dca_position;
 pub mod trigger_aggregate;
 
@@ -17,5 +18,6 @@ pub use init_pool::*;
 pub use init_window::*;
 pub use mark_window_failed::*;
 pub use refund_intent::*;
+pub use set_position_active::*;
 pub use setup_dca_position::*;
 pub use trigger_aggregate::*;

@@ -1,10 +1,20 @@
-//! Permissionless window creation.
+//! Permissionless window creation with lifecycle guard.
 //!
-//! Anyone can create the next window once the previous cycle completes
-//! (status >= 2 = Executing/Distributed) OR for the first window of a
-//! pool (window_counter == 0 and active_window == default).
+//! Anyone can create the next window once the previous cycle is in a
+//! terminal state — Distributed (2) or Failed (3) — OR for the very
+//! first window of a pool (window_counter == 0). The previous window
+//! is passed as `previous_window` (Optional via remaining_accounts
+//! pattern would be cleaner, but optional account types tighten the
+//! Anchor IDL story so we require it explicitly except for the first
+//! window where it's passed as the Pool itself as a sentinel).
 //!
-//! Window number derived from pool.window_counter (incremented atomically).
+//! Closing the 5th audit finding from internal review on 2026-05-11.
+//! Previously the lifecycle guard was a TODO comment; orphan windows
+//! could be opened mid-flight by any caller, which threatens the
+//! pool's `active_window` pointer integrity. Now: any caller wanting
+//! to advance past an Aggregating window must first call
+//! `mark_window_failed` (pool authority) to reach the Failed terminal
+//! state, then init_window can proceed.
 
 use anchor_lang::prelude::*;
 
@@ -32,23 +42,52 @@ pub struct InitWindow<'info> {
     )]
     pub window: Account<'info, Window>,
 
+    /// CHECK: Previous window for lifecycle-guard. Must satisfy ONE of:
+    ///   - First window of pool (window_counter == 0): pass anything,
+    ///     handler will skip the read
+    ///   - Subsequent: must equal pool.active_window AND have status
+    ///     in {2, 3} (Distributed | Failed)
+    /// The validation runs inside the handler instead of as an Anchor
+    /// `constraint =` to avoid the stack-frame access violation pattern
+    /// that bit us during the input_mint constraint refactor (see
+    /// commit_intent.rs comment around line 60).
+    #[account(mut)]
+    pub previous_window: AccountInfo<'info>,
+
     pub system_program: Program<'info, System>,
 }
 
 pub fn handler(ctx: Context<InitWindow>) -> Result<()> {
     let pool = &mut ctx.accounts.pool;
 
-    // Anti-spam: only allow new window when previous cycle is complete
-    // (or for the very first window of this pool).
+    // Lifecycle guard: only allow new window when the previous cycle is
+    // in a terminal state. First window of the pool is exempt (no
+    // previous window to check). The previous_window account is passed
+    // in but only read for window_counter > 0.
     let is_first_window = pool.window_counter == 0 && pool.active_window == Pubkey::default();
     if !is_first_window {
-        // For subsequent windows we cannot read the previous Window account
-        // here cheaply (would need it as remaining_accounts). Pool's
-        // active_window pointer is sufficient: we rely on
-        // execute_swap/distribute to have run before another window opens
-        // — enforced by frontend + indexer driving the lifecycle.
-        // TODO (post-MVP): pass previous Window as constraint account and
-        // require status >= 2 here.
+        // The previous window must match the pool's active_window pointer
+        // AND its on-chain status must be terminal (2=Distributed or
+        // 3=Failed). The handler reads previous_window's data directly to
+        // avoid the Anchor `constraint =` stack-pressure pattern.
+        require!(
+            ctx.accounts.previous_window.key() == pool.active_window,
+            TideError::AggregateNotReady
+        );
+        // Deserialize the previous window's `status` byte. Anchor account
+        // layout: 8-byte discriminator + 32 bytes pool + 8 bytes
+        // window_number + 8 bytes start_ts + 8 bytes end_ts + 1 byte
+        // status. Status byte is at offset 64.
+        let data = ctx.accounts.previous_window.try_borrow_data()?;
+        require!(data.len() >= 65, TideError::AggregateNotReady);
+        let prev_status = data[64];
+        // Reject Open (0) and Aggregating (1); accept Distributed (2),
+        // Failed (3). The cycle MUST settle before another window opens.
+        require!(
+            prev_status == 2 || prev_status == 3,
+            TideError::AggregateNotReady
+        );
+        drop(data); // release borrow before pool/window mutation below
     }
 
     let window = &mut ctx.accounts.window;

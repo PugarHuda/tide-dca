@@ -251,12 +251,20 @@ async function cmdInit() {
     info(`Window #${counter} already exists at ${windowPda.toBase58()}, skipping init_window`);
   } else {
     info(`Initializing window #${counter}...`);
+    // Lifecycle guard added in upgrade #6: previous window must be
+    // Distributed (2) or Failed (3). For the very first window the
+    // handler skips this read; we still pass an account so the ix
+    // layout is consistent. Use poolPda as sentinel for first window,
+    // findWindowPda(counter-1n) for subsequent.
+    const prevWindow =
+      counter === 0n ? poolPda : findWindowPda(counter - 1n);
     const ix = new TransactionInstruction({
       programId: PROGRAM_ID,
       keys: [
         { pubkey: owner, isSigner: true, isWritable: true },
         { pubkey: poolPda, isSigner: false, isWritable: true },
         { pubkey: windowPda, isSigner: false, isWritable: true },
+        { pubkey: prevWindow, isSigner: false, isWritable: true },
         { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
       ],
       data: discriminator("init_window"),

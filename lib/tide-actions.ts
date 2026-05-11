@@ -359,12 +359,24 @@ export async function submitInitWindow(
   wallet: SignerWallet,
   poolPda: PublicKey,
   currentWindowCounter: bigint,
+  /** Previous window pubkey for the lifecycle guard. For the very first
+   *  window of a pool (counter==0), pass `poolPda` as a sentinel since
+   *  the handler skips the read when is_first_window is true. */
+  previousWindowPda?: PublicKey,
 ): Promise<SubmitResult> {
   if (!wallet.publicKey) return { ok: false, error: "Wallet not connected" };
   if (!wallet.sendTransaction) return { ok: false, error: "Wallet does not support sendTransaction" };
 
   const caller = wallet.publicKey;
   const [windowPda] = findWindowPda(poolPda, currentWindowCounter);
+
+  // For first window (counter 0), use poolPda as sentinel since handler
+  // skips the previous_window read in that case.
+  const prevWindow =
+    previousWindowPda ??
+    (currentWindowCounter === 0n
+      ? poolPda
+      : findWindowPda(poolPda, currentWindowCounter - 1n)[0]);
 
   const data = discriminator("init_window");
 
@@ -374,6 +386,7 @@ export async function submitInitWindow(
       { pubkey: caller, isSigner: true, isWritable: true },
       { pubkey: poolPda, isSigner: false, isWritable: true },
       { pubkey: windowPda, isSigner: false, isWritable: true },
+      { pubkey: prevWindow, isSigner: false, isWritable: true },
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
     ],
     data,

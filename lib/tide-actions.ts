@@ -741,6 +741,12 @@ export type ExecuteSwapParams = {
   /** Slippage tolerance in bps for the Jupiter quote. */
   slippageBps?: number;
   targetMint?: PublicKey;
+  /** Optional Pyth V2 price account for honest on-chain realized-slippage
+   *  computation. Pass the canonical SOL/USD feed when target_mint=SOL
+   *  on mainnet. Pass undefined (or omit) → SystemProgram sentinel,
+   *  handler skips Pyth math. Defaults to undefined since devnet has no
+   *  Pyth feed coverage for our test mint pair. */
+  pythPriceAccount?: PublicKey;
 };
 
 export async function submitExecuteSwap(
@@ -841,7 +847,15 @@ export async function submitExecuteSwap(
     isWritable: a.isWritable,
   }));
 
-  // 6. Fixed accounts in ExecuteSwap struct order.
+  // Pyth price account for honest realized-slippage. Caller can pass a
+  // real Pyth feed (e.g. SOL/USD `H6ARHf6Y...`) when target_mint == SOL;
+  // otherwise pass SystemProgram as sentinel (handler detects + skips
+  // Pyth math). On devnet there's no Pyth feed for our test mint pair,
+  // so we always sentinel here. On mainnet the operator passes the
+  // proper feed account.
+  const pythAccount = params.pythPriceAccount ?? SystemProgram.programId;
+
+  // 6. Fixed accounts in ExecuteSwap struct order (matches Rust struct).
   const fixedKeys = [
     { pubkey: caller, isSigner: true, isWritable: true },
     { pubkey: params.poolPda, isSigner: false, isWritable: true },
@@ -852,6 +866,7 @@ export async function submitExecuteSwap(
     { pubkey: escrowInputAta, isSigner: false, isWritable: true },
     { pubkey: escrowOutputAta, isSigner: false, isWritable: true },
     { pubkey: new PublicKey(jupiterIx.programId), isSigner: false, isWritable: false },
+    { pubkey: pythAccount, isSigner: false, isWritable: false },
     { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
     { pubkey: ASSOCIATED_TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
     { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },

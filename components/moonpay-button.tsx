@@ -57,7 +57,14 @@ export function MoonPayButton({
         toast.error(`MoonPay sign endpoint returned ${res.status}`);
         return;
       }
-      const json = (await res.json()) as { url: string; signed: boolean };
+      const json = (await res.json()) as { url?: string; signed?: boolean };
+      // Validate shape before window.open — a 200 response with malformed
+      // body (e.g. missing url field) would otherwise open about:blank
+      // and the user just sees a blank tab.
+      if (typeof json.url !== "string" || !json.url.startsWith("http")) {
+        toast.error("MoonPay sign endpoint returned malformed response");
+        return;
+      }
       window.open(json.url, "_blank", "noopener,noreferrer");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err));

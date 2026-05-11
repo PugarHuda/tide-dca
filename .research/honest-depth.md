@@ -217,7 +217,21 @@ so they're known and prioritized.
 | **HIGH** | `programs/tide/src/instructions/init_window.rs` | The "previous window must be in finalized state" guard is left as a `TODO` — anyone can open a new window while the current one is still Open or Aggregating. The pool's `active_window` pointer flips to the new window, orphaning the old one. **Mitigation today**: the seed-loop only opens new windows after orphaning, this is by design for the demo. **Fix**: pass previous Window account, `require!(prev.status >= 2)` before allowing new window creation, except for the very first window. |
 | **MED** | `programs/tide/src/instructions/init_pool.rs` | No `require!(min_pool_size_usdc > 0)`. If set to 0, `trigger_aggregate` skips threshold check, `execute_swap` runs with empty escrow, every claim returns 0 — funds permanently locked because no refund instruction exists. **Fix**: enforce minimum > 0 + add `refund_intent` instruction for stuck-Open windows. |
 
-**Why not redeploy now**: Anchor program upgrade = re-running `anchor build && anchor deploy` against `HanBZ74Q...`. Even a no-op redeploy invalidates IDL caches and could drift state-account layouts if Rust struct changes propagated unintentionally. With submission < 24h away, the safer move is freeze the program at the validated commit and document.
+**Status update 2026-05-11 mid-submission-day**: 3 of 5 findings have been **code-fixed** in `programs/tide/src/instructions/`:
+
+- ✅ `execute_swap.rs`: added `JUPITER_V6_PROGRAM_ID` const + `#[account(address = JUPITER_V6_PROGRAM_ID)]` constraint on the jupiter_program account
+- ✅ `commit_intent.rs`: added `constraint = input_mint.key() == pool.input_mint`
+- ✅ `commit_intent.rs` handler: added `require!(amount <= position.amount_per_window)` bound
+
+`anchor build` passes cleanly (18 deprecation warnings only, no errors). Bytecode size is 382,136 bytes.
+
+**Devnet redeploy blocked**: upgrade requires temporary buffer rent of ~2.66 SOL; our deploy wallet (`FvyseLeV...`) has 2.29 SOL on devnet. All known airdrop endpoints (default RPC, Helius devnet) rate-limited at submission time. Code is ready and reviewable in the repo at commits documented in `git log`.
+
+**Mainnet implication**: when the program ships to mainnet, these constraints land with the first deploy — no upgrade choreography required. The fixes are pre-applied in source.
+
+**What didn't get fixed today** (struct changes too risky day-of-submission):
+- `init_window.rs` lifecycle guard (requires passing prev Window account → IDL change)
+- `init_pool.rs` min check + refund instruction (additive ix, untested code path)
 
 **Honest framing for judges**: "We had 5 on-chain audit findings surface in our internal QA review before submission. Documented them publicly in `.research/honest-depth.md`. Operator-controlled execute_swap mitigates the critical Jupiter constraint gap during demo, but pre-mainnet we ship: (1) Jupiter program hardcoded constraint, (2) commit_intent amount bound to position cadence, (3) input_mint pool-bound, (4) init_window lifecycle guard, (5) refund instruction + min_pool_size > 0 enforcement. None of these are funds-at-risk under our current operator model — they harden against adversarial-caller scenarios mainnet has."
 

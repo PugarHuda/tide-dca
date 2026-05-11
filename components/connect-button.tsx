@@ -419,6 +419,7 @@ function AccountMenu({
     };
   }, [open]);
 
+  const toast = useToast();
   const handleCopy = async () => {
     if (!fullAddress) return;
     try {
@@ -426,7 +427,10 @@ function AccountMenu({
       setCopied(true);
       setTimeout(() => setCopied(false), 1400);
     } catch {
-      // ignore — older browsers / blocked permissions
+      // Clipboard API blocked (insecure context, denied permission, or
+      // older browser) — surface a fallback hint instead of silently
+      // doing nothing. User can still triple-click + copy manually.
+      toast.info("Clipboard blocked — select the address manually");
     }
   };
 

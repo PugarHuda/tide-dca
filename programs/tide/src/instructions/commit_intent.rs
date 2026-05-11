@@ -54,7 +54,9 @@ pub struct CommitIntent<'info> {
     )]
     pub intent: Account<'info, Intent>,
 
-    /// USDC mint (input).
+    /// USDC mint (input). Constrained to pool.input_mint so a caller can't
+    /// substitute an arbitrary SPL token and pollute window accounting.
+    #[account(constraint = input_mint.key() == pool.input_mint @ TideError::InvalidRouteData)]
     pub input_mint: Account<'info, Mint>,
 
     /// User's USDC token account.
@@ -94,6 +96,17 @@ pub fn handler(
     amount: u64,
 ) -> Result<()> {
     require!(amount > 0, TideError::InvalidAmount);
+
+    // Bind commit amount to the user's declared DCA cadence. Allow
+    // committing LESS than the configured per-window amount (so a user
+    // can partial-commit during a tight month) but not more — committing
+    // 100x your declared amount in a single window breaks the fairness
+    // invariant a "DCA pool" implies and could let a whale dominate the
+    // pro-rata distribution.
+    require!(
+        amount <= ctx.accounts.position.amount_per_window,
+        TideError::InvalidAmount
+    );
 
     let clock = Clock::get()?;
     require!(

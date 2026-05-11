@@ -25,6 +25,13 @@ use anchor_spl::token::{Mint, Token, TokenAccount};
 use crate::error::TideError;
 use crate::state::{Pool, Window, ESCROW_SEED_PREFIX};
 
+/// Jupiter v6 program ID — the only swap program execute_swap accepts.
+/// Hardcoded to prevent a malicious caller from substituting a fake program
+/// that drains the input escrow. If Jupiter ever migrates to v7+, this
+/// requires a program upgrade — explicit on purpose.
+pub const JUPITER_V6_PROGRAM_ID: Pubkey =
+    anchor_lang::solana_program::pubkey!("JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4");
+
 #[derive(Accounts)]
 pub struct ExecuteSwap<'info> {
     #[account(mut)]
@@ -73,9 +80,11 @@ pub struct ExecuteSwap<'info> {
     )]
     pub escrow_output_ata: Account<'info, TokenAccount>,
 
-    /// CHECK: Jupiter swap program. Verified loosely — we forward the CPI to
-    /// whatever the caller provides; the rest of the account list (passed via
-    /// `remaining_accounts`) is what Jupiter validates internally.
+    /// CHECK: Jupiter swap program. Constrained to the canonical Jupiter v6
+    /// address so a malicious caller cannot substitute a fake program that
+    /// drains the input escrow. The account list (`remaining_accounts`) is
+    /// still validated by Jupiter internally as before.
+    #[account(address = JUPITER_V6_PROGRAM_ID @ TideError::InvalidRouteData)]
     pub jupiter_program: AccountInfo<'info>,
 
     pub token_program: Program<'info, Token>,

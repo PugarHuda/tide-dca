@@ -130,8 +130,18 @@ async function getBalances() {
     const ata = getAssociatedTokenAddressSync(USDC_MINT, OWNER);
     const bal = await conn.getTokenAccountBalance(ata);
     usdc = bal.value.uiAmount ?? 0;
-  } catch {
-    /* no ata */
+  } catch (err) {
+    // "TokenAccountNotFoundError" / 0x0 result is fine — wallet doesn't
+    // own a USDC ATA yet, balance is genuinely 0. Anything else (RPC
+    // timeout, 429, deserialization error) we surface so the operator
+    // can tell "no USDC" from "RPC dropped a tick" instead of falsely
+    // pausing commits via the MIN_USDC_BALANCE guard.
+    const msg = err instanceof Error ? err.message : String(err);
+    const isAtaMissing =
+      /could not find account|account not found|TokenAccountNotFound/i.test(msg);
+    if (!isAtaMissing) {
+      console.warn(`[${ts()}] USDC balance fetch failed (RPC?): ${msg}`);
+    }
   }
   return { sol: sol / 1e9, usdc };
 }
@@ -189,7 +199,7 @@ async function tick(stats) {
       success(`init_window confirmed${sig ? ` ${sig.slice(0, 16)}…` : ""}`);
       stats.initCount++;
     } else {
-      error(`init failed: ${r.stderr.slice(0, 120)}`);
+      error(`init failed:\n${r.stderr || r.stdout}`);
     }
     return;
   }
@@ -232,7 +242,7 @@ async function tick(stats) {
           success(`init_window confirmed${sig ? ` ${sig.slice(0, 16)}…` : ""}`);
           stats.initCount++;
         } else {
-          error(`init failed: ${r.stderr.slice(0, 120)}`);
+          error(`init failed:\n${r.stderr || r.stdout}`);
         }
         return;
       }
@@ -243,7 +253,7 @@ async function tick(stats) {
         success(`trigger_aggregate confirmed${sig ? ` ${sig.slice(0, 16)}…` : ""}`);
         stats.aggregateCount++;
       } else {
-        error(`aggregate failed: ${r.stderr.slice(0, 120)}`);
+        error(`aggregate failed:\n${r.stderr || r.stdout}`);
       }
       return;
     }
@@ -260,7 +270,7 @@ async function tick(stats) {
         success(`commit_intent confirmed${sig ? ` ${sig.slice(0, 16)}…` : ""}`);
         stats.commitCount++;
       } else {
-        error(`commit failed: ${r.stderr.slice(0, 120)}`);
+        error(`commit failed:\n${r.stderr || r.stdout}`);
       }
       return;
     }
@@ -280,7 +290,7 @@ async function tick(stats) {
       success(`init_window confirmed${sig ? ` ${sig.slice(0, 16)}…` : ""}`);
       stats.initCount++;
     } else {
-      error(`init failed: ${r.stderr.slice(0, 120)}`);
+      error(`init failed:\n${r.stderr || r.stdout}`);
     }
     return;
   }
@@ -293,7 +303,7 @@ async function tick(stats) {
       success(`init_window confirmed${sig ? ` ${sig.slice(0, 16)}…` : ""}`);
       stats.initCount++;
     } else {
-      error(`init failed: ${r.stderr.slice(0, 120)}`);
+      error(`init failed:\n${r.stderr || r.stdout}`);
     }
     return;
   }

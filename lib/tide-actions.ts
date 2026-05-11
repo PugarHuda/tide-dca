@@ -103,7 +103,14 @@ async function preflightAndSend(
     throw wrapped;
   }
 
-  return wallet.sendTransaction!(tx, connection);
+  // Defensive null-check instead of bang-assertion — even though all
+  // callers gate on wallet.publicKey + sendTransaction at form level,
+  // a future caller could skip that and the runtime error would surface
+  // as a cryptic "is not a function" instead of an actionable message.
+  if (!wallet.sendTransaction) {
+    throw new Error("Connected wallet does not support sendTransaction");
+  }
+  return wallet.sendTransaction(tx, connection);
 }
 
 export type SetupDcaParams = {
@@ -587,23 +594,40 @@ export async function submitExecuteSwap(
   }
 
   // 3. Resolve ALT pubkeys to AddressLookupTableAccount instances on the wire.
-  //    getAddressLookupTable resolves cluster-wide; null means table doesn't
-  //    exist on this cluster (devnet vs mainnet drift is the usual cause).
+  //    getAddressLookupTable returns { value: null } when the table doesn't
+  //    exist on this cluster — that's a soft-fail (devnet/mainnet drift).
+  //    Throws when the RPC itself fails (timeout, 429) — that's a HARD fail
+  //    we MUST log because losing a critical ALT silently produces a
+  //    Transaction-too-large error at sign time with no breadcrumb.
   const lookupTables: AddressLookupTableAccount[] = [];
   for (const addr of lookupTableAddresses) {
     try {
       const res = await connection.getAddressLookupTable(new PublicKey(addr));
-      if (res.value) lookupTables.push(res.value);
-    } catch {
-      // Soft-fail per ALT — Jupiter sometimes returns mainnet ALT addresses
-      // even when quoted from devnet API. Skipping a missing one is OK as
-      // long as the route's accounts are still resolvable inline.
+      if (res.value) {
+        lookupTables.push(res.value);
+      } else {
+        console.warn(
+          `[Tide] ALT ${addr} not found on this cluster — Jupiter may have returned a mainnet-only address; route accounts must inline`,
+        );
+      }
+    } catch (err) {
+      // RPC error (not "not found") — surface so we can diagnose later.
+      console.error(
+        `[Tide] ALT ${addr} resolution failed (RPC error):`,
+        err instanceof Error ? err.message : String(err),
+      );
     }
   }
 
   // 4. Build execute_swap data: discriminator + Vec<u8> (route data) + u64 (min_acquired)
   //    Borsh Vec<u8> = u32 length prefix + bytes.
   const routeDataBytes = Buffer.from(jupiterIx.data, "base64");
+  if (routeDataBytes.length === 0) {
+    return {
+      ok: false,
+      error: "Jupiter returned empty route data — try again or pick a different pair",
+    };
+  }
   const argBuf = Buffer.alloc(4 + routeDataBytes.length + 8);
   argBuf.writeUInt32LE(routeDataBytes.length, 0);
   routeDataBytes.copy(argBuf, 4);

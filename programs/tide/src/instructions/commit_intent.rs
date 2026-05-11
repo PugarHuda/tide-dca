@@ -54,9 +54,11 @@ pub struct CommitIntent<'info> {
     )]
     pub intent: Account<'info, Intent>,
 
-    /// USDC mint (input). Constrained to pool.input_mint so a caller can't
-    /// substitute an arbitrary SPL token and pollute window accounting.
-    #[account(constraint = input_mint.key() == pool.input_mint @ TideError::InvalidRouteData)]
+    /// USDC mint (input). Checked in the handler against pool.input_mint —
+    /// moving the check out of the Anchor constraint avoids pushing stack
+    /// usage past Solana BPF's 4KB frame limit during account validation
+    /// (a `constraint =` here triggered stack-frame access violations in
+    /// the SPL Token CPI path; handler check is equivalent semantically).
     pub input_mint: Account<'info, Mint>,
 
     /// User's USDC token account.
@@ -96,6 +98,15 @@ pub fn handler(
     amount: u64,
 ) -> Result<()> {
     require!(amount > 0, TideError::InvalidAmount);
+
+    // Bind input_mint to pool.input_mint at handler-level instead of via
+    // an Anchor `constraint = ...` because constraint validation runs
+    // inside the account-deserialization phase where stack pressure is
+    // tightest. Comparing two Pubkeys here is cheap and safe.
+    require!(
+        ctx.accounts.input_mint.key() == ctx.accounts.pool.input_mint,
+        TideError::InvalidRouteData
+    );
 
     // Bind commit amount to the user's declared DCA cadence. Allow
     // committing LESS than the configured per-window amount (so a user

@@ -225,9 +225,15 @@ so they're known and prioritized.
 
 `anchor build` passes cleanly (18 deprecation warnings only, no errors). Bytecode size is 382,136 bytes.
 
-**Devnet redeploy blocked**: upgrade requires temporary buffer rent of ~2.66 SOL; our deploy wallet (`FvyseLeV...`) has 2.29 SOL on devnet. All known airdrop endpoints (default RPC, Helius devnet) rate-limited at submission time. Code is ready and reviewable in the repo at commits documented in `git log`.
+**Devnet redeploy: SHIPPED ✅** — `HanBZ74Q7syXerryjezBXCne23FUp6caeWeTPPAmebQg` upgraded on devnet at slot 461527952+. Two upgrade transactions:
+- First upgrade: [`5qfwvpu3...`](https://explorer.solana.com/tx/5qfwvpu39tFGJpjvGr8c8gGqNpaYfjYFcCHQJVFpKUpv4bpKP8SnzpsueWHc3tWJqbkvQfMWQPmM2jvXN8dtJPs4?cluster=devnet) — first attempt with `input_mint` as Anchor `constraint =` triggered stack-frame access violation in the SPL Token CPI path
+- Hotfix upgrade: [`27qfShmc...`](https://explorer.solana.com/tx/27qfShmcmqiiVMFz9Vcq3fnmktd9cRSDLQR4aRgy3bKLdkBfQKpSV1CpVncbHB7hfUt28QM39tMdj4NTBroYxby3?cluster=devnet) — moved `input_mint` check to handler-level `require!()` to reduce stack pressure during account validation phase; constraint semantics unchanged, just cheaper to evaluate
 
-**Mainnet implication**: when the program ships to mainnet, these constraints land with the first deploy — no upgrade choreography required. The fixes are pre-applied in source.
+Post-upgrade `commit_intent` validated: [`5ofNbwys...`](https://explorer.solana.com/tx/5ofNbwys7amFvcZvphKnNjXqbyEFcBwEKNzKoi84m7U9HA822caXhW61nScKtQdf6GKoExEkBHhHiRg7LuX9g5MV?cluster=devnet) — $10 USDC committed under new constraint chain (amount ≤ position.amount_per_window = $50 ✓, input_mint == pool.input_mint ✓).
+
+**Mainnet implication**: program is now hardened on devnet AND in source. Mainnet ramp picks up the same bytecode — no further on-chain work required for these three constraints.
+
+**Lesson from the stack-overflow**: Anchor's `#[account(constraint = ...)]` evaluates during the account-deserialization phase, which has tight stack budget on Solana BPF (4KB). When a constraint involves multiple Account-typed fields (here: comparing `input_mint.key()` against `pool.input_mint`), the macro-generated validation code pushes 64+ bytes of intermediate Pubkey buffers onto the stack at a layer that's already deep into the SPL Token CPI call chain. Moving the equivalent check into the handler runs it AFTER deserialization completes, when the stack has been freed up — same security, no overflow.
 
 **What didn't get fixed today** (struct changes too risky day-of-submission):
 - `init_window.rs` lifecycle guard (requires passing prev Window account → IDL change)

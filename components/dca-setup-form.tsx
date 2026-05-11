@@ -1,13 +1,18 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 
-import { submitSetupDcaPosition } from "@/lib/tide-actions";
+import {
+  submitMintTestUsdc,
+  submitSetupDcaPosition,
+} from "@/lib/tide-actions";
 import { useToast } from "@/components/toast";
-import { usePool } from "@/lib/hooks";
+import { usePool, useUserBalances } from "@/lib/hooks";
 import { MoonPayButton } from "@/components/moonpay-button";
 import { arciumConfigured } from "@/lib/arcium";
+import { CURRENT_NETWORK } from "@/lib/constants";
 
 /**
  * DCA setup form. Submits setup_dca_position via lib/tide-actions.ts;
@@ -27,6 +32,38 @@ export function DcaSetupForm() {
   const [amountUsdc, setAmountUsdc] = useState("50");
   const [maxSlippagePct, setMaxSlippagePct] = useState("1");
   const [submitting, setSubmitting] = useState(false);
+  const [minting, setMinting] = useState(false);
+  // Track post-submit success state so we can swap the form for a clear
+  // "what's next" CTA instead of letting the user wonder if anything
+  // happened beyond the toast that already faded.
+  const [successSig, setSuccessSig] = useState<string | null>(null);
+
+  const { usdcLamports, solBalanceFresh } = useUserBalances();
+  // Wallet-connected on devnet with empty USDC ATA → surface the test-
+  // USDC mint button inline so users don't have to discover /admin.
+  const needsTestUsdc =
+    !!wallet.publicKey &&
+    CURRENT_NETWORK === "devnet" &&
+    solBalanceFresh && // wait for balance fetch to complete to avoid flicker
+    usdcLamports === 0n;
+
+  const handleMintTestUsdc = async () => {
+    setMinting(true);
+    try {
+      const out = await submitMintTestUsdc(connection, wallet, {
+        amountUsdc: 100,
+      });
+      if (out.ok) {
+        toast.success("Minted 100 test USDC", { explorerSig: out.signature });
+      } else {
+        toast.error(out.error);
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Mint failed");
+    } finally {
+      setMinting(false);
+    }
+  };
 
   const windowSeconds = pool ? Number(pool.windowDurationSeconds) : 3600;
   const windowMinutes = Math.round(windowSeconds / 60);
@@ -61,6 +98,10 @@ export function DcaSetupForm() {
       });
       if (out.ok) {
         toast.success("DCA position created", { explorerSig: out.signature });
+        // Toast fades in ~3s. Persist the success state so the form
+        // turns into a clear "next step" panel rather than leaving the
+        // user wondering what just happened.
+        setSuccessSig(out.signature ?? null);
       } else {
         toast.error(out.error);
       }
@@ -92,12 +133,116 @@ export function DcaSetupForm() {
       annualBuys) /
     100;
 
+  // Post-success view: swap the form for a clear "what's next" panel.
+  // Mounted at the top of the return so user doesn't scroll past it.
+  if (successSig) {
+    return (
+      <div
+        className="card"
+        style={{ display: "flex", flexDirection: "column", gap: 18, padding: 28 }}
+      >
+        <div>
+          <span className="eyebrow" style={{ color: "var(--good)" }}>
+            ✓ DCA position created
+          </span>
+          <h2 className="page__h2" style={{ marginTop: 8, fontSize: 22 }}>
+            Your DCA pool subscription is live
+          </h2>
+          <p
+            className="muted"
+            style={{ marginTop: 10, lineHeight: 1.6, marginBottom: 0 }}
+          >
+            Next: head to the dashboard to commit your first ${amountUsdc} to
+            the current window. Each window aggregates with other depositors
+            before the swap, so the more time you give it, the better the
+            fill.
+          </p>
+        </div>
+
+        <a
+          href={`https://explorer.solana.com/tx/${successSig}?cluster=${CURRENT_NETWORK}`}
+          target="_blank"
+          rel="noreferrer"
+          className="card card--quiet"
+          style={{
+            padding: "12px 14px",
+            textDecoration: "none",
+            color: "inherit",
+            display: "flex",
+            flexDirection: "column",
+            gap: 4,
+          }}
+        >
+          <span className="tiny mute2">setup_dca_position tx</span>
+          <span
+            className="mono"
+            style={{
+              fontSize: 12,
+              color: "var(--accent)",
+              wordBreak: "break-all",
+            }}
+          >
+            {successSig.slice(0, 32)}…{successSig.slice(-12)}
+          </span>
+          <span className="tiny mute2" style={{ marginTop: 2 }}>
+            View on Solana Explorer ↗
+          </span>
+        </a>
+
+        <div className="flex" style={{ gap: 10, flexWrap: "wrap" }}>
+          <Link href="/dashboard" className="btn btn--primary">
+            View dashboard →
+          </Link>
+          <button
+            type="button"
+            className="btn btn--ghost"
+            onClick={() => setSuccessSig(null)}
+          >
+            Adjust position
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <form
       onSubmit={handleSubmit}
       className="card"
       style={{ display: "flex", flexDirection: "column", gap: 22 }}
     >
+      {needsTestUsdc && (
+        <div
+          className="card card--quiet"
+          style={{
+            padding: "12px 14px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            borderColor: "var(--accent-line)",
+            flexWrap: "wrap",
+          }}
+        >
+          <p className="tiny" style={{ color: "var(--text-1)", margin: 0 }}>
+            <span style={{ color: "var(--accent)", marginRight: 6 }}>ⓘ</span>
+            You're on devnet with 0 USDC. Grab 100 test USDC from the pool's
+            built-in faucet to try the flow.
+          </p>
+          <button
+            type="button"
+            className="btn btn--primary btn--sm"
+            onClick={() => void handleMintTestUsdc()}
+            disabled={minting}
+          >
+            {minting ? <span className="spinner spinner--sm" /> : null}
+            <span style={{ marginLeft: minting ? 8 : 0 }}>
+              {minting ? "Minting…" : "Mint 100 test USDC"}
+            </span>
+          </button>
+        </div>
+      )}
+
       <div className="field">
         <label className="field__label">Target token</label>
         <div

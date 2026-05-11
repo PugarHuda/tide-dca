@@ -26,7 +26,14 @@ import { PredatorEyes } from "@/components/predator-eyes";
 
 const WINDOW_DURATION_S = 3600;
 
-const FAKE_PUBKEYS = [
+// Illustrative deposits for the marketing FlowDiagram. These are
+// intentionally fake — the column header labels them "(illustrative)"
+// so users see the mechanism visually without needing a live window
+// with 6 real participants on screen. When deposit_amounts × $X
+// summed equals $600, the receive_amounts at ~0.5701 SOL per $100
+// also sum cleanly to the same ~3.4 SOL. Doc trail: INTEGRITY.md
+// flags these as hardcoded illustrative data.
+const ILLUSTRATIVE_PUBKEYS = [
   "8x9Yw…3Pq2",
   "Hk4Ve…wQ8M",
   "Bn7Mp…X4dR",
@@ -34,8 +41,8 @@ const FAKE_PUBKEYS = [
   "Q5tHb…gV1A",
   "L9wKy…r3Ze",
 ];
-const DEPOSIT_AMOUNTS = ["$50", "$100", "$25", "$200", "$75", "$150"];
-const RECEIVE_AMOUNTS = ["0.286", "0.572", "0.143", "1.143", "0.428", "0.857"];
+const ILLUSTRATIVE_DEPOSITS = ["$50", "$100", "$25", "$200", "$75", "$150"];
+const ILLUSTRATIVE_RECEIVES = ["0.286", "0.572", "0.143", "1.143", "0.428", "0.857"];
 
 function fmtHms(totalSec: number): string {
   if (totalSec < 0) totalSec = 0;
@@ -95,6 +102,13 @@ export default function LandingPage() {
         <Stats
           totalVolumeLamports={pool?.totalVolumeProcessed ?? 0n}
           windowCounter={pool?.windowCounter ?? 0n}
+          realizedSlippageBps={
+            currentWindow &&
+            currentWindow.status >= 2 &&
+            currentWindow.effectiveSlippageBps > 0
+              ? currentWindow.effectiveSlippageBps
+              : null
+          }
         />
       </Reveal>
       <Reveal>
@@ -408,14 +422,37 @@ function Stat({
 function Stats({
   totalVolumeLamports,
   windowCounter,
+  realizedSlippageBps,
 }: {
   totalVolumeLamports: bigint;
   windowCounter: bigint;
+  /** Realized slippage from a recent Distributed window (bps). Null if
+   *  no window has settled yet, in which case the strip falls back to
+   *  the design target instead of fabricating a number. */
+  realizedSlippageBps: number | null;
 }) {
   const hasVolume = totalVolumeLamports > 0n;
   // MEV reclaimed estimate: assume 0.46% bps recovered vs naive solo DCA.
   const mevReclaimedLamports = (totalVolumeLamports * 46n) / 10_000n;
   const windowsSettled = windowCounter > 0n ? windowCounter - 1n : 0n;
+
+  // Show realized slippage when a window has actually completed a swap;
+  // otherwise show the design target with a "—" suffix so users know
+  // it's aspirational, not measured.
+  const slippageStat =
+    realizedSlippageBps !== null && realizedSlippageBps > 0
+      ? {
+          l: "Realized slippage",
+          v: `${(realizedSlippageBps / 100).toFixed(2)}%`,
+          sub: `last window · vs ~0.51% solo`,
+          accent: true as const,
+        }
+      : {
+          l: "Target slippage",
+          v: "~0.05%",
+          sub: "design goal · awaiting first swap",
+          accent: true as const,
+        };
 
   const items: Array<{
     l: string;
@@ -430,12 +467,7 @@ function Stats({
         ? `on Solana ${CURRENT_NETWORK}`
         : "first window in flight",
     },
-    {
-      l: "Target slippage",
-      v: "0.05%",
-      sub: "vs ~0.51% solo",
-      accent: true,
-    },
+    slippageStat,
     {
       l: "MEV reclaimed",
       v: hasVolume ? fmtUsdcCompact(mevReclaimedLamports) : "0",
@@ -522,7 +554,7 @@ function FlowDiagram() {
       <div className="flow__col">
         <div className="flow__label">Depositors (illustrative)</div>
         <div className="flow__users">
-          {FAKE_PUBKEYS.map((pk, i) => (
+          {ILLUSTRATIVE_PUBKEYS.map((pk, i) => (
             <div key={i} className="flow__user">
               <span
                 className="flow__dot"
@@ -533,7 +565,7 @@ function FlowDiagram() {
                 className="mono tiny"
                 style={{ color: "var(--accent)" }}
               >
-                {DEPOSIT_AMOUNTS[i]}
+                {ILLUSTRATIVE_DEPOSITS[i]}
               </span>
             </div>
           ))}
@@ -587,14 +619,14 @@ function FlowDiagram() {
       <div className="flow__col">
         <div className="flow__label">Depositors receive</div>
         <div className="flow__users">
-          {FAKE_PUBKEYS.map((pk, i) => (
+          {ILLUSTRATIVE_PUBKEYS.map((pk, i) => (
             <div key={i} className="flow__user">
               <span className="mono tiny mute2">{pk}</span>
               <span
                 className="mono tiny"
                 style={{ color: "var(--accent)" }}
               >
-                {RECEIVE_AMOUNTS[i]} SOL
+                {ILLUSTRATIVE_RECEIVES[i]} SOL
               </span>
             </div>
           ))}

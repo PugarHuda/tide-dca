@@ -293,6 +293,10 @@ export function DcaSetupForm() {
               value={amountUsdc}
               onChange={(e) => setAmountUsdc(e.target.value)}
               required
+              autoFocus
+              inputMode="decimal"
+              aria-label="DCA amount per window in USDC"
+              aria-describedby="amount-presets-help"
             />
             <span
               className="mono mute2"
@@ -306,13 +310,20 @@ export function DcaSetupForm() {
               USDC
             </span>
           </div>
-          <div className="flex gap-2" style={{ marginTop: 4 }}>
+          <div
+            id="amount-presets-help"
+            className="flex gap-2"
+            style={{ marginTop: 4 }}
+            role="group"
+            aria-label="Amount preset shortcuts"
+          >
             {[20, 50, 100, 250, 500].map((v) => (
               <button
                 type="button"
                 key={v}
                 className="btn btn--ghost btn--sm"
                 onClick={() => setAmountUsdc(String(v))}
+                aria-pressed={amountUsdc === String(v)}
               >
                 ${v}
               </button>

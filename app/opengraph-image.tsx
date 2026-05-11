@@ -108,7 +108,7 @@ export default function OpengraphImage() {
             }}
           >
             Encrypted DCA aggregated across users, settled as one Jupiter swap.
-            Slippage drops from ~0.51% to ~0.05%.
+            10 Anchor instructions · 13 QA cases · 5 successful upgrades.
           </div>
         </div>
 
@@ -124,12 +124,16 @@ export default function OpengraphImage() {
             color: "#8b95a3",
           }}
         >
-          <div style={{ display: "flex", gap: 32 }}>
+          <div style={{ display: "flex", gap: 28 }}>
             <span>Solana</span>
             <span style={{ color: "#5a6573" }}>·</span>
             <span>Arcium MPC</span>
             <span style={{ color: "#5a6573" }}>·</span>
-            <span>Jupiter</span>
+            <span>Jupiter v6</span>
+            <span style={{ color: "#5a6573" }}>·</span>
+            <span>Phantom</span>
+            <span style={{ color: "#5a6573" }}>·</span>
+            <span>Privy</span>
           </div>
           <div style={{ color: "#06b6d4", fontWeight: 500 }}>
             tide-dca.vercel.app

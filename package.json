@@ -12,6 +12,12 @@
     "anchor:build": "anchor build",
     "anchor:test": "anchor test",
     "anchor:deploy:devnet": "anchor deploy --provider.cluster devnet",
+    "qa:sponsors": "node scripts/qa-sponsors.mjs --prod",
+    "qa:e2e": "node scripts/qa-e2e.mjs",
+    "seed:status": "node scripts/qa-e2e.mjs status",
+    "seed:loop": "node scripts/seed-loop.mjs",
+    "test:refund-flow": "node scripts/test-refund-flow.mjs",
+    "test:close-intent": "node scripts/test-close-intent.mjs",
     "format": "prettier --write \"**/*.{ts,tsx,md}\""
   },
   "dependencies": {

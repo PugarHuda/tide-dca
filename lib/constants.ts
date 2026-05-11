@@ -69,6 +69,15 @@ export const SLIPPAGE_LIMITS = {
   DEFAULT: 100, // 1% bps
 } as const;
 
+/**
+ * Reference figure for naive solo-DCA slippage on Solana DCA volume.
+ * Used as the comparison baseline in dashboard "Total saved" math and
+ * in landing-page savings calc. 50 bps = ~0.5% which matches public
+ * estimates of average MEV bite on retail jupiter DCA. Replaced by
+ * realized window.effective_slippage_bps when available.
+ */
+export const STANDALONE_SLIPPAGE_BPS_DEFAULT = 50;
+
 // Sponsor branding
 export const SPONSOR_INTEGRATIONS = {
   arcium: "Encrypted intent storage + aggregate compute (mechanism core)",

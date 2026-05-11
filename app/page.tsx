@@ -77,8 +77,17 @@ export default function LandingPage() {
     ? Math.max(0, Number(currentWindow.endTs) - now)
     : 0;
   const simRemaining = WINDOW_DURATION_S - (now % WINDOW_DURATION_S);
-  const openRemainingS = currentWindow ? realRemaining : simRemaining;
-  const windowDuration = currentWindow
+  // "Open and accepting commits" is stricter than "window exists" —
+  // a window in Aggregating/Distributed/Failed should NOT render as
+  // live on the hero panel even though `currentWindow` is non-null.
+  // Falls back to simulated countdown for atmospheric effect when no
+  // open window is present.
+  const isWindowOpen =
+    !!currentWindow &&
+    currentWindow.status === 0 &&
+    realRemaining > 0;
+  const openRemainingS = isWindowOpen ? realRemaining : simRemaining;
+  const windowDuration = isWindowOpen
     ? Math.max(1, Number(currentWindow.endTs) - Number(currentWindow.startTs))
     : WINDOW_DURATION_S;
   const fillPct = (1 - openRemainingS / windowDuration) * 100;
@@ -96,7 +105,7 @@ export default function LandingPage() {
         participantCount={currentWindow?.intentCount ?? 0}
         poolSizeLamports={currentWindow?.totalCommittedUsdc ?? 0n}
         windowNumber={currentWindow?.windowNumber ?? 0n}
-        isLive={!!currentWindow}
+        isLive={isWindowOpen}
       />
       <Reveal>
         <Stats

@@ -1765,3 +1765,18 @@ textarea {
     text-align: center;
   }
 }
+
+/* ===================== /demo page mobile tweaks ===================== */
+/* Tighten typography + spacing on narrow viewports so the auto-cycle
+   step card doesn't tower over the screen + tx-sig mono text doesn't
+   overflow horizontally. */
+@media (max-width: 600px) {
+  .page--narrow {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  .page__h1 {
+    font-size: 24px;
+    line-height: 1.2;
+  }
+}

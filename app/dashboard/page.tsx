@@ -30,8 +30,7 @@ import {
   formatSol,
   formatUsdc,
 } from "@/lib/utils";
-
-const STANDALONE_SLIPPAGE_BPS_DEFAULT = 50;
+import { STANDALONE_SLIPPAGE_BPS_DEFAULT } from "@/lib/constants";
 
 export default function DashboardPage() {
   const { connection } = useConnection();

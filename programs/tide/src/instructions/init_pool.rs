@@ -47,6 +47,13 @@ pub fn handler(
         TideError::InvalidWindowDuration
     );
     require!(fee_bps <= MAX_FEE_BPS, TideError::InvalidFeeBps);
+    // Enforce a positive minimum pool size. If left at 0, the
+    // trigger_aggregate threshold check (window.total_committed_usdc
+    // >= pool.min_pool_size_usdc) becomes vacuous — an empty window
+    // could advance to Aggregating, execute_swap could run on $0,
+    // and per-claim allocations would all be 0. Funds would be locked
+    // because no refund instruction exists. Block at the source.
+    require!(min_pool_size_usdc > 0, TideError::InvalidAmount);
 
     let pool = &mut ctx.accounts.pool;
     pool.authority = ctx.accounts.authority.key();

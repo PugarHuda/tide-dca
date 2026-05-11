@@ -237,7 +237,8 @@ Post-upgrade `commit_intent` validated: [`5ofNbwys...`](https://explorer.solana.
 
 **What didn't get fixed today** (struct changes too risky day-of-submission):
 - `init_window.rs` lifecycle guard (requires passing prev Window account → IDL change)
-- `init_pool.rs` min check + refund instruction (additive ix, untested code path)
+- ~~`init_pool.rs` min check~~ — **DEPLOYED** in 3rd upgrade tx [`2avhProv...`](https://explorer.solana.com/tx/2avhProv5RrUkwZjozcE2hADF5Xjzzzx4u5FKPAvnyXHRWvw7c11mV5CxxU2pMY9UBTxpRuMYPvdNcccvXGDTXxq?cluster=devnet) — added `require!(min_pool_size_usdc > 0, TideError::InvalidAmount)` so future pools can't be initialized with a vacuous threshold that would let empty windows aggregate
+- Refund instruction (additive ix, untested code path) — punt to post-submission
 
 **Honest framing for judges**: "We had 5 on-chain audit findings surface in our internal QA review before submission. Documented them publicly in `.research/honest-depth.md`. Operator-controlled execute_swap mitigates the critical Jupiter constraint gap during demo, but pre-mainnet we ship: (1) Jupiter program hardcoded constraint, (2) commit_intent amount bound to position cadence, (3) input_mint pool-bound, (4) init_window lifecycle guard, (5) refund instruction + min_pool_size > 0 enforcement. None of these are funds-at-risk under our current operator model — they harden against adversarial-caller scenarios mainnet has."
 

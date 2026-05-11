@@ -509,6 +509,42 @@ async function qa12_refund_flow_evidence() {
   }
 }
 
+// ─── QA-13: close_intent on-chain evidence ─────────────────────────────────
+//
+// Mirrors QA-12: verifies the close_intent tx that ran against the
+// settled (refunded) intent at window #6 actually landed on devnet and
+// completed without error. Pairs with /demo step 7's pinned link.
+async function qa13_close_intent_evidence() {
+  section(13, "close_intent on-chain evidence");
+  const sig =
+    "2gzNf6UNUwyBeMLm6d3UScsCJx9SsonBgH4bodMNBdvkuat9nenaFCBsjKPdpMYLLaqDcNLYeEQdXGQtb8YpsS8C";
+  try {
+    const result = await fetch(DEVNET, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "getTransaction",
+        params: [sig, { maxSupportedTransactionVersion: 0, encoding: "json" }],
+      }),
+    }).then((r) => r.json());
+    const tx = result?.result;
+    const ok2 = tx && tx.meta && tx.meta.err === null;
+    info(`close_intent: ${ok2 ? `✓ on-chain (slot ${tx.slot})` : "MISSING"} (${sig.slice(0, 16)}…)`);
+    if (ok2) {
+      ok(`close_intent reclaim-rent flow verified on-chain`);
+      record("QA-13", "close-intent", "PASS", `slot ${tx.slot}`);
+    } else {
+      fail(`close_intent tx not findable`);
+      record("QA-13", "close-intent", "FAIL", "not on-chain");
+    }
+  } catch (err) {
+    fail(`close-intent check threw: ${err.message}`);
+    record("QA-13", "close-intent", "FAIL", err.message);
+  }
+}
+
 // ─── QA-10: Arcium SDK ─────────────────────────────────────────────────────
 async function qa10_arcium_sdk() {
   section(10, "Arcium SDK — RescueCipher + x25519 in browser path");
@@ -565,6 +601,7 @@ async function main() {
   await qa10_arcium_sdk();
   await qa11_new_anchor_ix();
   await qa12_refund_flow_evidence();
+  await qa13_close_intent_evidence();
 
   console.log(`\n\x1b[1m━━ Summary ━━\x1b[0m`);
   for (const r of results) {

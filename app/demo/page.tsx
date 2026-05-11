@@ -121,9 +121,11 @@ const STEPS: Step[] = [
   {
     k: "close",
     title: "7. close_intent — reclaim rent",
-    body: "After settlement (claim or refund), the Intent account is reclaimable. Closing it via Anchor's close=owner constraint sweeps ~0.002 SOL of rent back to the user. Compounds over many DCA cycles.",
+    body: "After settlement (claim or refund), the Intent account is reclaimable. Closing it via Anchor's close=owner constraint sweeps ~0.002 SOL of rent back to the user. Compounds over many DCA cycles: a daily DCA over a year would otherwise leave ~0.73 SOL stuck in stale account rents.",
     badge: "User",
     badgeKind: "accent",
+    txSig: "2gzNf6UNUwyBeMLm6d3UScsCJx9SsonBgH4bodMNBdvkuat9nenaFCBsjKPdpMYLLaqDcNLYeEQdXGQtb8YpsS8C",
+    txLabel: "close_intent devnet tx (1,795,680 lamports recovered)",
     branch: "main",
   },
 ];

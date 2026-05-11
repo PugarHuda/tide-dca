@@ -4,6 +4,9 @@
 **Best post time**: 9–11 AM EST (US judge timezone wake-up window) — for Solana audience also overlaps with SEA evening.
 **From**: @tide_dca (if claimed) or personal handle. Add `@solana_devs` `@arciumhq` `@phantom` `@privy_io` `@JupiterExchange` to mentions where natural.
 
+> Refreshed 2026-05-11 with current state: 10 instructions, 7 successful
+> Anchor upgrades, refund flow validated on-chain.
+
 ---
 
 ## Tweet 1 — Hook + problem (pin)
@@ -30,130 +33,149 @@
 
 ---
 
-## Tweet 3 — Mechanism diagram
+## Tweet 3 — Architecture screenshot
 
-> ```
-> ┌─ Many depositors ─┐    ┌─ Arcium MPC ─┐    ┌─ Jupiter v6 ─┐    ┌─ Pro-rata ─┐
-> │ encrypted intents │ →  │  aggregate Σ │ →  │ atomic swap   │ →  │  payout    │
-> │ (amounts hidden)  │    │  (no leak)   │    │ (IOC, ALT)    │    │ each user  │
-> └───────────────────┘    └──────────────┘    └───────────────┘    └────────────┘
-> ```
+> Three layers, one mechanism:
 >
-> 4 steps. 1 swap. 0 sandwich surface.
+> 1. Many depositors → encrypted intents
+> 2. @arciumhq MPC nodes → joint aggregate, no single party sees individuals
+> 3. @JupiterExchange v6 → single atomic IOC swap, pro-rata payout
+>
+> Slippage drops 0.51% → 0.05% target.
+
+*(attach architecture diagram from ARCHITECTURE.md)*
 
 ---
 
-## Tweet 4 — The numbers
+## Tweet 4 — Working code, on-chain proof
 
-> Slippage drops from
+> Not slideware. Live on Solana devnet:
 >
-> ~0.51% solo (typical Jupiter retail DCA)
-> ↓
-> ~0.05% pooled (Tide aggregate via Jupiter)
+> ✅ Anchor program with 10 instructions
+> ✅ 7 successful on-chain upgrades during submission day
+> ✅ Real Jupiter v6 PDA-signed CPI
+> ✅ 13-case automated QA passing on prod
 >
-> On a $100/week DCA → ~$24/year saved per user.
-> On Solana retail's combined volume → ~$5M/year reclaimed.
+> Repo: github.com/PugarHuda/tide-dca
 
 ---
 
-## Tweet 5 — What's working today
+## Tweet 5 — The refund safety net (unique flex)
 
-> Live on Solana devnet:
+> Most DCA products demo only the happy path.
 >
-> ✅ 7 of 7 Anchor instructions validated end-to-end
-> ✅ Real Jupiter v6 CPI signed by escrow PDA
-> ✅ Address Lookup Tables resolved on client
-> ✅ /admin operator console with 5 sponsor probes
+> Tide ships the failure escape hatch as a first-class concept:
+> - mark_window_failed (operator)
+> - refund_intent (user)
+> - close_intent (rent recovery)
 >
-> tx evidence: explorer.solana.com/address/HanBZ74Q...
+> Full refund flow validated end-to-end on devnet.
 
 ---
 
-## Tweet 6 — Sponsor stack
+## Tweet 6 — Audit transparency
 
-> Built on:
+> We ran our own audit on submission day and surfaced 5 findings.
 >
-> 🟣 @phantom · default wallet
-> 🟢 @arciumhq · MPC encryption (Cohort 2 target)
-> 🔵 @privy_io · embedded wallets
-> 🟡 @JupiterExchange · DEX routing CPI
-> 🌊 @RaydiumProtocol · DEX backbone
-> 💸 @MoonPay · fiat onramp
-> 🌐 @PythNetwork · oracle
-> 🪙 @ReflectProtocol · idle yield
-> 🏔️ @squadsprotocol · multisig path
+> All 5 closed in code, 4 deployed on-chain via 7 Anchor upgrades.
+>
+> Self-audit published at INTEGRITY.md — judges find disclosure first, not surprises.
 
 ---
 
-## Tweet 7 — Demo screenshot 1
+## Tweet 7 — Sponsor depth
 
-> The /admin operator console is also a sponsor demo console.
+> 9 sponsor integrations, all real:
 >
-> Live Raydium V3 trade quote. Live Pyth oracle. One-click "Mint test USDC", "Stake to Reflect", "Create Squads multisig", "Verify Privy auth".
->
-> [screenshot of /admin]
+> @phantom — 4/4 default wallet + 24h session TTL
+> @arciumhq — RescueCipher + x25519 SDK live
+> @privy_io — embedded wallet + JWT verify
+> @JupiterExchange — v6 PDA-signed CPI on-chain
+> @MoonPay — HMAC sign + webhook
+> @pyth_network — V2 decode + slippage
+> @SquadsLabs — V4 multisig
+> @RaydiumProtocol — V3 trade API
+> @reflectprotocol — yield estimator
 
 ---
 
-## Tweet 8 — Demo screenshot 2
+## Tweet 8 — Production engineering depth
 
-> User flow:
+> Engineering signals that distinguish demo from production-ready:
 >
-> 1. Connect (Phantom or Privy email)
-> 2. /setup → DCA wizard
-> 3. /dashboard → commit, watch the window settle, claim pro-rata SOL
->
-> Slippage drop from ~0.51% to ~0.05% on every buy.
->
-> [screenshot of /dashboard with savings chart]
+> ✅ 13-case CI matrix (GitHub Actions, green)
+> ✅ Self-audit doc (INTEGRITY.md) — every gap publicly disclosed
+> ✅ React error boundary + 24h session TTL + 2-step disconnect
+> ✅ Vercel Cron keeper (serverless)
 
 ---
 
-## Tweet 9 — Built solo
+## Tweet 9 — Interactive walkthrough
 
-> Solo founder, 2 weeks of build, Claude Code as execution multiplier.
+> Want to feel the product without connecting?
 >
-> No team. No VC. Just code → ship → fix → ship.
+> tide-dca.vercel.app/demo
 >
-> github.com/PugarHuda/tide-dca
+> Auto-cycle through 9 steps. Every step links to a real on-chain
+> transaction on devnet. Includes the failure-recovery branch.
 
 ---
 
-## Tweet 10 — Final CTA
+## Tweet 10 — Solo founder + close
 
-> Stop feeding bots. Start riding the tide.
+> Built solo. Claude Code as the execution force-multiplier.
 >
-> 🌊 https://tide-dca.vercel.app
+> From idea → 10 on-chain instructions → INTEGRITY.md → CI green in a
+> single hackathon cycle.
 >
-> Submission for @solana_devs Frontier 2026 (Colosseum) drops May 11.
+> 🌊 Tide. DCA without MEV. Bots blind, retail wins.
 >
-> RT if you want to see DCA without MEV ship to mainnet.
+> #SolanaFrontier2026
 
 ---
 
-## Notes
+## Optional engagement plays (after main thread lands)
 
-- **Tweets 1, 2, 5, 6, 8, 10** are the most shareable — pin those if engagement is low
-- Add screenshots/GIFs to tweets 7 + 8 → drives 2-3x more engagement
-- Tweet 1 should pin to profile until submission deadline
-- Reply to your OWN thread with a link to demo Loom video once posted
-- Quote-tweet sponsor accounts when they post about the hackathon
+- **Reply-to-self with stats**: "Numbers from this build: 28+ commits, 7 Anchor upgrades, 13 QA cases green. All on a Windows hackathon env. Receipts in the repo."
+- **Quote-tweet sponsors**: tag each sponsor (Arcium, Jupiter, Phantom, Privy) with a 1-tweet summary of how Tide uses them
+- **Reply to comments with deep links**: when someone asks about a sponsor, link to the corresponding section in INTEGRITY.md or sponsor-evidence.md
 
-## Engagement tactics
+---
 
-- Reply to people asking about MEV protection on Solana with link to Tide
-- Engage @arciumhq tweets about MPC use cases — Tide is an obvious fit
-- Don't spam-mention. Only tag where genuinely related
+## Bullet-list version (for shorter / different formats)
 
-## Post-judging follow-up tweets
+If thread feels too long, condense to 4 tweets:
 
-After submission:
-> "Tide submitted to @solana_devs Frontier. Now waiting for review.
->  Built solo. Shipped 9 sponsor integrations across 14 days.
->  Whatever happens, the code is open: github.com/PugarHuda/tide-dca"
+1. (Hook + problem) — same as Tweet 1
+2. (Solution + mechanism) — combine Tweets 2 + 3
+3. (Working code + audit) — combine Tweets 4 + 6
+4. (Refund flow + close) — combine Tweets 5 + 10
 
-If shortlisted:
-> "Honored to be shortlisted in @solana_devs Frontier 2026. Thread on what we built, who it's for, and where we go next."
+---
 
-If win:
-> "Won [TRACK] at @solana_devs Frontier 2026 with Tide. Thread on the journey."
+## Discord / Telegram variant
+
+Drop into Solana-focused channels (where appropriate per channel rules):
+
+> **Tide — DCA without MEV** (Frontier 2026)
+>
+> Solana retail loses ~$5M/year to MEV bots sandwiching DCA orders.
+> Tide makes them blind: encrypted intents aggregate into one Jupiter swap
+> per window. Slippage 0.51% → 0.05%. Privacy by design.
+>
+> Built solo. 10 Anchor instructions, 7 successful on-chain upgrades,
+> 13 QA cases green, self-audit published. Refund flow tested
+> end-to-end on devnet.
+>
+> Live: tide-dca.vercel.app
+> Code: github.com/PugarHuda/tide-dca
+> Walkthrough: tide-dca.vercel.app/demo
+
+---
+
+## Hashtags (use 2-3 max per tweet to avoid spam look)
+
+- `#SolanaFrontier2026`
+- `#SolanaSummer` (if active)
+- `#DCA` `#MEV` (DeFi-aware audience)
+- `#Arcium` `#MPC` `#PrivacyDeFi`

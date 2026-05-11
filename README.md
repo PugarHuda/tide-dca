@@ -4,10 +4,11 @@
 
 [**Live demo**](https://tide-dca.vercel.app) · **Demo video** · [Devnet program](https://explorer.solana.com/address/HanBZ74Q7syXerryjezBXCne23FUp6caeWeTPPAmebQg?cluster=devnet)
 
+[![CI](https://github.com/PugarHuda/tide-dca/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/PugarHuda/tide-dca/actions/workflows/ci.yml)
 [![Solana](https://img.shields.io/badge/Solana-Frontier_2026-9945FF)](https://colosseum.com/frontier)
-[![Arcium](https://img.shields.io/badge/Arcium-MPC_Cohort_2-06b6d4)](https://arcium.com)
+[![Arcium](https://img.shields.io/badge/Arcium-MPC_mainnet--alpha-06b6d4)](https://arcium.com)
 [![Anchor](https://img.shields.io/badge/Anchor-0.31.1-blue)](https://www.anchor-lang.com)
-[![Status](https://img.shields.io/badge/devnet-validated_7%2F7-22c55e)](#what-works-today)
+[![Status](https://img.shields.io/badge/devnet-10%20ix%20%C2%B7%207%20upgrades%20%C2%B7%2013%20QA-22c55e)](#what-works-today)
 
 ---
 

@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 
+import { Analytics } from "@vercel/analytics/next";
+
 import { Providers } from "@/lib/providers";
 import { Nav } from "@/components/nav";
 import { NetworkBanner } from "@/components/network-banner";
@@ -67,6 +69,10 @@ export default function RootLayout({
             </ErrorBoundary>
           </ToastProvider>
         </Providers>
+        {/* Vercel Analytics — free on hobby plan. Tracks page views +
+            referrers without cookies or PII. Useful post-submission to
+            see which routes judges engage with. */}
+        <Analytics />
       </body>
     </html>
   );

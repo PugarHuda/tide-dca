@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
+import { DemoSimulation } from "@/components/demo-simulation";
+
 /**
  * /demo — auto-cycling visualization of the Tide lifecycle.
  *
@@ -173,14 +175,33 @@ export default function DemoPage() {
   return (
     <main className="page page--narrow" style={{ paddingTop: 40 }}>
       <div style={{ marginBottom: 28 }}>
-        <span className="eyebrow">Auto-walkthrough</span>
+        <span className="eyebrow">Interactive demo</span>
         <h1 className="page__h1" style={{ marginTop: 8 }}>
-          Tide lifecycle, end-to-end
+          Experience Tide without connecting a wallet
         </h1>
         <p className="page__sub">
-          Every step below is backed by a <strong>real on-chain
-          transaction</strong> on Solana devnet. Click the explorer link
-          to verify. Hover the card to pause auto-advance.
+          Two views below. The <strong>interactive sandbox</strong> walks
+          through real UI states with mocked data so you can feel the
+          product. The <strong>on-chain evidence timeline</strong> links
+          every phase to a real devnet transaction so you can verify it
+          actually works.
+        </p>
+      </div>
+
+      {/* Phase 1: Interactive sandbox — mocked state, real UI shapes */}
+      <DemoSimulation />
+
+      {/* Section break */}
+      <div style={{ marginTop: 40, marginBottom: 20 }}>
+        <span className="eyebrow">On-chain evidence</span>
+        <h2 className="page__h1" style={{ marginTop: 8, fontSize: 24 }}>
+          Every step backed by a real devnet tx
+        </h2>
+        <p className="page__sub">
+          The interactive sim above shows what it <em>feels like</em> to use
+          Tide. The timeline below links each phase to the actual
+          on-chain transaction that proves the mechanism works. Auto-
+          advances every 5 seconds; hover the card to pause.
         </p>
       </div>
 

@@ -4,22 +4,27 @@
 **Tone**: Confident, declarative, slight ocean metaphor
 **Background music**: optional ambient cyan/synth, low volume
 
+> Last refreshed 2026-05-11 to reflect current state: 10 instructions,
+> 7 successful Anchor upgrades, 13 QA cases, /demo interactive page,
+> refund flow validated end-to-end on devnet.
+
 ---
 
 ## Pre-recording checklist
 
 - [ ] Hard refresh `tide-dca.vercel.app` (Ctrl+Shift+R) — clean state
-- [ ] Phantom on devnet, wallet `3QfHXyf...` connected
+- [ ] Phantom on devnet, wallet `3QfHXyf...` connected (the funded one)
 - [ ] Browser at 1280×720 (or 1920×1080), zoom 100%
 - [ ] Console closed, dock cleaned, no notification clutter
 - [ ] Loom in `Cam + Screen` mode, 1080p
 - [ ] Mic muted while not narrating, push-to-talk if possible
 - [ ] Tabs prepared in this order:
-  1. https://tide-dca.vercel.app (landing)
-  2. https://tide-dca.vercel.app/admin (operator console)
-  3. https://tide-dca.vercel.app/setup (DCA wizard)
-  4. https://tide-dca.vercel.app/dashboard (user view)
-  5. https://explorer.solana.com/tx/2yCSusUk... (Jupiter CPI proof)
+  1. `https://tide-dca.vercel.app/` (landing)
+  2. `https://tide-dca.vercel.app/demo` (auto-walkthrough — backup view)
+  3. `https://tide-dca.vercel.app/setup` (DCA wizard)
+  4. `https://tide-dca.vercel.app/dashboard` (user view)
+  5. `https://tide-dca.vercel.app/admin` (operator console)
+  6. `https://explorer.solana.com/address/HanBZ74Q7syXerryjezBXCne23FUp6caeWeTPPAmebQg?cluster=devnet` (program)
 
 ---
 
@@ -27,102 +32,146 @@
 
 ### 0:00–0:10 — Hook
 
-**Action**: Landing page open. Eyes visible in background. Scroll briefly so judge sees the page.
+**Action**: Landing page open. Predator eyes in background. Brief scroll
+so judge sees the hero.
 
 **Narration**:
 > "Solana retail loses about five million dollars a year to MEV bots
-> sandwiching their DCA orders. Tide makes the bots blind."
+> sandwiching DCA orders. Tide makes that impossible."
 
 ---
 
-### 0:10–0:25 — Problem & solution one-liner
+### 0:10–0:20 — The mechanism
 
-**Action**: Hover over "Comparison" section. The two cards (without/with Tide) visible.
+**Action**: Scroll to "How Tide fixes it" diagram. Point at the 3 stages
+(commit → MPC aggregate → atomic swap).
 
 **Narration**:
-> "Every solo DCA buy is a sandwich target. Bot sees your transaction
-> in the mempool, frontruns to push price up, sells at your inflated
-> price. Half a percent slippage per buy.
->
-> Tide aggregates encrypted DCA intents inside Arcium MPC. The whole
-> pool settles as one Jupiter swap. Bots see one anonymous transaction,
-> never your individual order."
+> "Users encrypt their intents client-side via Arcium MPC. The pool
+> aggregates encrypted commits across many depositors. One swap executes
+> for everyone. Bots see the bucket grow but can't read individual
+> amounts."
 
 ---
 
-### 0:25–0:55 — Live mechanism walkthrough
+### 0:20–0:32 — Show real on-chain state
 
-**Action**: Switch to `/admin`. Highlight the lifecycle cards in order.
-
-**Narration**:
-> "Here's the operator console — full lifecycle on Solana devnet.
-> Init pool with a 15-minute window. Open the window. Mint test USDC.
-> User commits an encrypted intent. The window closes. Trigger
-> aggregate, execute the swap through Jupiter — and that's a real CPI
-> on chain."
-
-**Action**: Click on the **Fetch Raydium Quote** button, wait for response, point at the live route + price impact.
+**Action**: Open `/dashboard` tab. Point at the live window status card
+(countdown ticking, real committed amount, real intent count).
 
 **Narration**:
-> "Raydium V3 trade API live, returning a real route. Pyth oracle
-> snapshot streaming SOL/USD. The /admin page is also a sponsor demo
-> console — every integration is one click away."
+> "This is live devnet state right now. Window number eight is open
+> with real committed USDC. Same program, same instructions you'd hit
+> on mainnet — just devnet for the demo."
 
 ---
 
-### 0:55–1:15 — User flow + sponsors
+### 0:32–0:45 — The product flow (use /demo for fast pacing OR /setup live)
 
-**Action**: Switch to `/dashboard`. Show KPI cards, savings chart, window history.
+**Action**: Open `/demo` tab. Let the auto-cycle show 2-3 steps. Each step
+links to a real devnet tx.
 
 **Narration**:
-> "On the user side: dashboard tracks committed amounts, settled
-> windows, savings versus naive DCA. Connect with Phantom or Privy.
-> Top up via MoonPay. Idle escrow estimated yield via Reflect. Pool
-> authority migration to Squads multisig is one button on the admin
-> page."
+> "Every step here is backed by a real on-chain transaction.
+> commit_intent — escrows USDC. trigger_aggregate — closes the window.
+> execute_swap — single atomic Jupiter v6 swap. claim_allocation — pro
+> rata distribution. All seven core instructions validated on devnet."
 
 ---
 
-### 1:15–1:30 — Devnet proof
+### 0:45–0:58 — The audit story (differentiator)
 
-**Action**: Switch to Solana Explorer tab showing the `2yCSusUk` execute_swap transaction. Zoom in on the inner instruction with Jupiter program id.
+**Action**: Open the repo at `INTEGRITY.md` in a new tab. Scroll to the
+"Mocked/hardcoded" section.
 
 **Narration**:
-> "Seven of seven instructions validated end-to-end on devnet. This is
-> the execute_swap transaction — Tide program signs the Jupiter CPI
-> via the escrow PDA. Full audit trail in the repo."
+> "We ran our own audit on submission day and surfaced five findings.
+> All five closed in code, four deployed on-chain via seven successful
+> Anchor upgrades. We added a safety layer: mark_window_failed plus
+> refund_intent lets users recover funds if a swap can't execute.
+> Closed loop. We published the self-audit so judges see disclosure
+> first, not surprises."
 
 ---
 
-### 1:25–1:30 — CTA close
+### 0:58–1:15 — Refund flow proof (the unique flex)
 
-**Action**: Switch back to landing. Eyes prominently in background.
+**Action**: Open `/demo` and jump to step 5b/6b (failure branch). Click
+through to one of the pinned txs (`SDrdCnJ3...` refund_intent).
 
 **Narration**:
-> "Tide. DCA without MEV. Live now on Solana devnet. tide-dca dot
-> vercel dot app."
+> "Most DCA products demo only the happy path. Tide ships the failure
+> escape hatch as a first-class concept. Here's the refund_intent
+> transaction on devnet: wallet recovered the exact intent amount.
+> Three on-chain transactions prove the full recovery flow works."
 
 ---
 
-## Editing notes
+### 1:15–1:25 — Sponsor depth
 
-- Cut at sentence boundaries; don't keep "uhm", breath sounds
-- Add a 1-second fade-in at start, fade-out at end
-- Bottom-right Loom captions: "Built solo for Solana Frontier 2026 (Colosseum)"
-- Optional outro card (3 sec): "tide-dca.vercel.app  ·  github.com/PugarHuda/tide-dca"
-- Export as 1080p MP4
-- Upload to Loom + YouTube; submission form usually accepts both
+**Action**: Open `/admin` tab. Point at the live Arcium SDK probe + Pyth
+oracle card + MoonPay status card + Raydium quote card.
 
-## Backup (if Anda nervous on first take)
+**Narration**:
+> "Nine sponsor integrations, all real. Arcium's RescueCipher SDK
+> running in your browser. Pyth oracle live mainnet feed.
+> MoonPay's currencies API live. Jupiter v6 PDA-signed CPI proven on
+> devnet. Privy embedded wallet, Phantom, Squads V4, Raydium V3, all
+> wired."
 
-Practice the **first 10 seconds** twice — that's the hook. After that, the rest follows naturally.
+---
 
-If a take goes long (>120s), don't redo from scratch. Edit out the slow parts in Loom — they have a built-in trim tool.
+### 1:25–1:30 — Close
 
-If you flub a word, **pause for 1 second**, repeat the sentence cleanly. Editing keeps the clean take.
+**Action**: Back to landing page. Hold on the hero.
 
-## Voice guidance
+**Narration**:
+> "DCA without MEV. Bots blind, retail wins. Tide — built for Solana
+> Frontier 2026."
 
-- **Pace**: ~155 words per minute (slightly faster than conversational, not rushed)
-- **Tone**: declarative, certain. Avoid filler "kind of" / "sort of" / "I think"
-- **Emphasis**: hit "five million dollars", "Bots blind", "real CPI on chain", "seven of seven"
+---
+
+## Optional 60-second cut
+
+If 90s is too long, trim by cutting:
+- 0:32–0:45 product flow detail (skip /demo, just say "10 instructions
+  live")
+- 1:15–1:25 sponsor depth (just name Arcium + Jupiter + Phantom)
+
+Final 60s: hook (10s) + mechanism (10s) + on-chain state (12s) + audit
+story (13s) + refund proof (10s) + close (5s).
+
+---
+
+## Backup if a feature breaks during recording
+
+- If wallet popup hangs: switch to `/demo` and narrate over the
+  auto-cycle instead of the live form
+- If devnet RPC is slow: read from `tide-dca.vercel.app` cached SSR
+  rather than expecting real-time tx confirmation
+- If admin probe doesn't load: cite the on-chain tx pin in the README
+  instead (`https://explorer.solana.com/tx/2yCSusUk...`)
+
+---
+
+## Numbers to mention if asked
+
+- **10 Anchor instructions** (was 7 at scaffold)
+- **7 successful upgrades** on devnet during submission day
+- **13/13 sponsor QA cases** passing on prod
+- **5 of 5 audit findings** closed in code + on-chain
+- **3 pinned refund-flow txs** validating the full failure path
+- **9 sponsor integrations** — all real, depth ranges 3/4 to 4/4
+
+These numbers come from the README + INTEGRITY.md. If a judge wants
+specifics during Q&A, link to those docs.
+
+---
+
+## File references
+
+- `/demo` page source: `app/demo/page.tsx`
+- Refund flow validation: `scripts/test-refund-flow.mjs`
+- Audit findings closure: `.research/honest-depth.md` +
+  `INTEGRITY.md`
+- Sponsor evidence: `.research/sponsor-evidence.md`

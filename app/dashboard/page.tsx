@@ -48,14 +48,34 @@ export default function DashboardPage() {
 
   // Pre-compute the headline savings number (defaults to 0n when pool /
   // position aren't ready so the hook order stays stable across renders).
+  //
+  // Realized vs projected: when `currentWindow.effectiveSlippageBps`
+  // is populated (set by execute_swap with the Pyth on-chain consumer
+  // — upgrade #7), the savings number reflects actual realized slippage
+  // vs the heuristic STANDALONE_SLIPPAGE_BPS_DEFAULT baseline. Until
+  // a swap actually completes, fall back to pool.fee_bps as a proxy
+  // (conservative — overstates the saved amount slightly because
+  // fee_bps ≈ 5 vs target slippage of ~50bps).
+  //
+  // We use logical-OR (||) instead of nullish-coalescing (??) on
+  // effectiveSlippageBps because 0 means "swap completed, achieved
+  // baseline exactly" — but for an initial state with no swap yet, we
+  // want the fee_bps proxy. The == 0 case is indistinguishable from
+  // "no swap" on devnet so this is the honest fallback.
+  const realizedAvgSlippageBps = currentWindow?.effectiveSlippageBps || 0;
+  const avgSlippageBpsForCalc =
+    realizedAvgSlippageBps > 0
+      ? realizedAvgSlippageBps
+      : (pool?.feeBps ?? 5);
   const headlineSavedRaw =
     pool && position
       ? calculateSavings(
-          currentWindow?.effectiveSlippageBps ?? pool.feeBps,
+          avgSlippageBpsForCalc,
           STANDALONE_SLIPPAGE_BPS_DEFAULT,
           position.totalDeposited,
         )
       : 0n;
+  const isSavedRealized = realizedAvgSlippageBps > 0;
   const animatedSavedDollars = useCountUp(
     Number(headlineSavedRaw) / 1_000_000,
   );
@@ -227,7 +247,20 @@ export default function DashboardPage() {
             so far
           </h1>
           <p className="page__sub" style={{ marginBottom: 0 }}>
-            Live data from devnet · window subscription auto-updates
+            {isSavedRealized ? (
+              <>
+                <span style={{ color: "var(--good)" }}>● realized</span> ·
+                window {currentWindow?.windowNumber.toString()} averaged{" "}
+                {(realizedAvgSlippageBps / 100).toFixed(2)}% slippage vs
+                ~{(STANDALONE_SLIPPAGE_BPS_DEFAULT / 100).toFixed(2)}% solo
+              </>
+            ) : (
+              <>
+                <span style={{ color: "var(--warn)" }}>● projected</span> ·
+                using pool fee_bps as baseline · auto-switches to realized
+                once first swap completes
+              </>
+            )}
           </p>
         </div>
         <Link href="/setup" className="btn btn--ghost">

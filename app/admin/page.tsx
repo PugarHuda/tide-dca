@@ -183,9 +183,20 @@ export default function AdminPage() {
               )} of ${formatUsdc(pool.minPoolSizeUsdc)} required`
             : undefined;
 
+  // Authority gate: distinguish "view this as the pool authority" from
+  // "view this as a random visitor who navigated here." The on-chain
+  // program already enforces authority for the privileged ix (init_pool,
+  // mark_window_failed); this UI gate keeps the page from looking like
+  // a "live wallet draining" button forest to a non-operator visitor.
+  const isAuthority =
+    !!pool &&
+    !!wallet.publicKey &&
+    pool.authority.toBase58() === wallet.publicKey.toBase58();
+  const showAuthorityBanner = !!wallet.publicKey && !!pool && !isAuthority;
+
   return (
     <main className="page page--narrow">
-      <div style={{ marginBottom: 36 }}>
+      <div style={{ marginBottom: 28 }}>
         <span className="eyebrow">Operator Console</span>
         <h1 className="page__h1" style={{ marginTop: 8 }}>
           Tide admin / cron tools
@@ -195,6 +206,50 @@ export default function AdminPage() {
           aggregation/swap orchestration.
         </p>
       </div>
+
+      {showAuthorityBanner && (
+        <section
+          className="card card--quiet"
+          style={{
+            padding: "14px 18px",
+            marginBottom: 24,
+            borderColor: "rgba(245, 158, 11, 0.32)",
+            background: "var(--warn-soft)",
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
+          <span
+            style={{
+              width: 8,
+              height: 8,
+              borderRadius: "50%",
+              background: "var(--warn)",
+              boxShadow: "0 0 8px var(--warn)",
+              flexShrink: 0,
+            }}
+            aria-hidden
+          />
+          <p
+            className="tiny"
+            style={{ color: "var(--text-1)", margin: 0, flex: 1 }}
+          >
+            <strong>Read-only view.</strong> Your wallet (
+            <span className="mono">
+              {wallet.publicKey?.toBase58().slice(0, 6)}…
+              {wallet.publicKey?.toBase58().slice(-4)}
+            </span>
+            ) is not the pool authority. Privileged actions like
+            <code className="mono mute2"> init_pool </code> and
+            <code className="mono mute2"> mark_window_failed </code> are
+            disabled here; the on-chain handlers reject them too. Connect
+            as <span className="mono">{pool!.authority.toBase58().slice(0, 6)}…
+            {pool!.authority.toBase58().slice(-4)}</span> for write access.
+          </p>
+        </section>
+      )}
 
       <section className="card" style={{ marginBottom: 24 }}>
         <div className="card__head">

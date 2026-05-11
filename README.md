@@ -137,7 +137,7 @@ tide/
 │   └── moonpay.ts         MoonPay onramp URL builder
 ├── scripts/                Dev tools — qa-smoke.mjs, qa-e2e.mjs, qa-sponsors.mjs
 ├── tests/                  Anchor LiteSVM + Surfpool tests
-├── .research/              Hackathon docs — sponsor-evidence, qa-results, submission
+├── .research/              Hackathon docs — sponsor-evidence, honest-depth, submission
 └── .superstack/            Project context (idea, build)
 ```
 

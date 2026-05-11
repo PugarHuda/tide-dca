@@ -20,17 +20,20 @@ import {
   submitClaimAllocation,
   submitCloseIntent,
   submitCommitIntent,
+  submitMintTestUsdc,
   submitRefundIntent,
+  submitSetPositionActive,
 } from "@/lib/tide-actions";
 import { useToast } from "@/components/toast";
 import { useCountUp } from "@/lib/hooks/use-count-up";
+import { useUserBalances } from "@/lib/hooks";
 import {
   bpsToPct,
   calculateSavings,
   formatSol,
   formatUsdc,
 } from "@/lib/utils";
-import { STANDALONE_SLIPPAGE_BPS_DEFAULT } from "@/lib/constants";
+import { CURRENT_NETWORK, STANDALONE_SLIPPAGE_BPS_DEFAULT } from "@/lib/constants";
 
 export default function DashboardPage() {
   const { connection } = useConnection();
@@ -45,6 +48,9 @@ export default function DashboardPage() {
   const [committing, setCommitting] = useState(false);
   const [refunding, setRefunding] = useState(false);
   const [closing, setClosing] = useState(false);
+  const [minting, setMinting] = useState(false);
+  const [togglingActive, setTogglingActive] = useState(false);
+  const { usdcLamports, solBalanceFresh } = useUserBalances();
 
   // Pre-compute the headline savings number (defaults to 0n when pool /
   // position aren't ready so the hook order stays stable across renders).
@@ -161,6 +167,53 @@ export default function DashboardPage() {
     }
   };
 
+  // Mint test USDC — wallet must be the mint authority. On devnet the
+  // test mint authority was rotated to the user wallet 3QfHXyf...,
+  // so any visitor connecting that wallet can mint. Other wallets get
+  // a 0x4 mint authority mismatch — handled by toast error.
+  const handleMintTestUsdc = async () => {
+    setMinting(true);
+    try {
+      const out = await submitMintTestUsdc(connection, wallet, { amountUsdc: 100 });
+      if (out.ok) {
+        toast.success("Minted 100 test USDC", { explorerSig: out.signature });
+      } else {
+        toast.error(out.error);
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Mint failed");
+    } finally {
+      setMinting(false);
+    }
+  };
+
+  // Pause / resume DCA position. Flips position.active flag on-chain
+  // via set_position_active ix (upgrade #8). When inactive, commit_intent
+  // reverts with PositionInactive so future cycles auto-skip until
+  // user resumes. No funds move; cumulative stats preserved.
+  const handleTogglePositionActive = async () => {
+    if (!position) return;
+    setTogglingActive(true);
+    try {
+      const out = await submitSetPositionActive(
+        connection,
+        wallet,
+        poolPubkey,
+        !position.active,
+      );
+      if (out.ok) {
+        toast.success(
+          position.active ? "DCA paused" : "DCA resumed",
+          { explorerSig: out.signature },
+        );
+      } else {
+        toast.error(out.error);
+      }
+    } finally {
+      setTogglingActive(false);
+    }
+  };
+
   if (!connected) {
     return (
       <EmptyState
@@ -263,10 +316,97 @@ export default function DashboardPage() {
             )}
           </p>
         </div>
-        <Link href="/setup" className="btn btn--ghost">
-          Adjust DCA
-        </Link>
+        <button
+          type="button"
+          className="btn btn--ghost"
+          onClick={() => void handleTogglePositionActive()}
+          disabled={togglingActive}
+          title={
+            position.active
+              ? "Pause future commits without closing the position"
+              : "Resume DCA — commit_intent will accept again"
+          }
+        >
+          {togglingActive
+            ? "Working…"
+            : position.active
+              ? "⏸ Pause DCA"
+              : "▶ Resume DCA"}
+        </button>
       </header>
+
+      {/* Mint test USDC banner — devnet + balance < commit amount.
+          Mint authority was rotated to user wallet 3QfHXyf...; any visitor
+          on that wallet can self-mint. Others get a clear toast error. */}
+      {CURRENT_NETWORK === "devnet" &&
+        solBalanceFresh &&
+        usdcLamports < position.amountPerWindow && (
+          <section
+            className="card card--quiet"
+            style={{
+              padding: "14px 18px",
+              marginBottom: 24,
+              borderColor: "var(--accent-line)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+              flexWrap: "wrap",
+            }}
+          >
+            <p className="tiny" style={{ color: "var(--text-1)", margin: 0 }}>
+              <span style={{ color: "var(--accent)", marginRight: 6 }}>ⓘ</span>
+              Your wallet has{" "}
+              <span className="mono">{formatUsdc(usdcLamports)}</span> — below
+              the {formatUsdc(position.amountPerWindow)} commit amount. Mint
+              test USDC to top up.
+            </p>
+            <button
+              type="button"
+              className="btn btn--primary btn--sm"
+              onClick={() => void handleMintTestUsdc()}
+              disabled={minting}
+            >
+              {minting ? <span className="spinner spinner--sm" /> : null}
+              <span style={{ marginLeft: minting ? 8 : 0 }}>
+                {minting ? "Minting…" : "Mint 100 test USDC"}
+              </span>
+            </button>
+          </section>
+        )}
+
+      {/* Paused position banner */}
+      {!position.active && (
+        <section
+          className="card card--quiet"
+          style={{
+            padding: "14px 18px",
+            marginBottom: 24,
+            borderColor: "rgba(245, 158, 11, 0.32)",
+            background: "var(--warn-soft)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
+          <p className="tiny" style={{ color: "var(--text-1)", margin: 0 }}>
+            <span style={{ color: "var(--warn)", marginRight: 6 }}>⏸</span>
+            DCA paused. Future commits will revert with{" "}
+            <code className="mono mute2">PositionInactive</code>. Cumulative
+            stats preserved — resume anytime.
+          </p>
+          <button
+            type="button"
+            className="btn btn--primary btn--sm"
+            onClick={() => void handleTogglePositionActive()}
+            disabled={togglingActive}
+          >
+            {togglingActive ? "Resuming…" : "Resume DCA"}
+          </button>
+        </section>
+      )}
 
       <section
         className="grid grid--4"

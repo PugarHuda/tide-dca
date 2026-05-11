@@ -1,14 +1,24 @@
-//! Mark an aggregating window as Failed when the swap can't execute.
+//! Mark a window as Failed when the swap can't execute OR when an
+//! empty window expired without any commits.
 //!
-//! Triggered by the pool authority when Jupiter has no route, slippage
-//! exceeds tolerance, or any other condition makes `execute_swap`
-//! impossible. Setting status=3 unlocks `refund_intent` so users can
-//! recover their committed USDC instead of being permanently stuck.
+//! Triggered by the pool authority when:
+//!   - status=1 (Aggregating): swap impossible (Jupiter no route, etc).
+//!     Standard escape hatch — unlocks refund_intent for participants.
+//!   - status=0 (Open) AND expired AND empty: no commits arrived before
+//!     window closed. Without this branch the lifecycle guard added in
+//!     upgrade #6 (`init_window` requires prev.status ≥ 2) would lock
+//!     the pool permanently — no one can open the next window because
+//!     the previous one is stuck in Open. Authority can sweep it to
+//!     Failed so the lifecycle advances.
 //!
-//! Only Aggregating (status=1) windows can be failed. Open (0) windows
-//! should expire and be aggregated first (or aborted at the off-chain
-//! coordinator layer). Distributed (2) windows already completed — no
-//! refund path. Already-Failed (3) windows are no-ops.
+//! Status guards:
+//!   - status=2 Distributed: NEVER — users may have unclaimed allocations
+//!   - status=3 Failed: idempotent no-op via the status check
+//!
+//! Funds invariant: status=1→3 transitions a window that received
+//! commits, leaving USDC in escrow for refund_intent recovery.
+//! status=0→3 transitions an empty window with no funds to recover.
+//! Either way, no value is destroyed.
 
 use anchor_lang::prelude::*;
 
@@ -33,7 +43,23 @@ pub struct MarkWindowFailed<'info> {
 
 pub fn handler(ctx: Context<MarkWindowFailed>) -> Result<()> {
     let window = &mut ctx.accounts.window;
-    require!(window.status == 1, TideError::AggregateNotReady);
+
+    // Case 1: Aggregating window — standard escape hatch.
+    // Case 2: Open + expired + empty — unstick lifecycle when no commits
+    //         arrived. Empty check is critical: must NEVER let authority
+    //         skip a window with active commits, that'd freeze user funds.
+    let is_aggregating = window.status == 1;
+    let clock = Clock::get()?;
+    let is_open_expired_empty = window.status == 0
+        && clock.unix_timestamp >= window.end_ts
+        && window.intent_count == 0
+        && window.total_committed_usdc == 0;
+
+    require!(
+        is_aggregating || is_open_expired_empty,
+        TideError::AggregateNotReady
+    );
+
     window.status = 3; // Failed
 
     emit!(WindowFailed {

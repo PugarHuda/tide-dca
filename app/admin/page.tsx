@@ -19,6 +19,7 @@ import {
   submitInitPool,
   submitInitWindow,
   submitMintTestUsdc,
+  submitMarkWindowFailed,
   submitTriggerAggregate,
 } from "@/lib/tide-actions";
 import { useToast } from "@/components/toast";
@@ -42,13 +43,13 @@ export default function AdminPage() {
   const authorityClass = useAuthorityClassification(pool?.authority ?? null);
 
   const [busyAction, setBusyAction] = useState<
-    "init_pool" | "init_window" | "mint_usdc" | "trigger" | "swap" | null
+    "init_pool" | "init_window" | "mint_usdc" | "trigger" | "swap" | "fail" | null
   >(null);
   const [mintAmount, setMintAmount] = useState("1000");
   const [poolWindowMinutes, setPoolWindowMinutes] = useState("15");
 
   const runAction = async (
-    name: "init_pool" | "init_window" | "mint_usdc" | "trigger" | "swap",
+    name: "init_pool" | "init_window" | "mint_usdc" | "trigger" | "swap" | "fail",
     label: string,
     runner: () => Promise<{ ok: boolean; signature?: string; error?: string }>,
   ) => {
@@ -106,6 +107,16 @@ export default function AdminPage() {
     }
     return runAction("trigger", "Aggregate triggered", () =>
       submitTriggerAggregate(connection, wallet, poolPubkey, windowPubkey),
+    );
+  };
+
+  const handleMarkWindowFailed = () => {
+    if (!windowPubkey) {
+      toast.error("No active window.");
+      return;
+    }
+    return runAction("fail", "Window marked Failed", () =>
+      submitMarkWindowFailed(connection, wallet, poolPubkey, windowPubkey),
     );
   };
 
@@ -529,6 +540,32 @@ export default function AdminPage() {
         }
         submitting={busyAction === "swap"}
         onClick={handleExecuteSwap}
+      />
+
+      <ActionCard
+        title="mark_window_failed"
+        description="Pool-authority escape hatch when the swap can't execute. Flips an Aggregating window to Failed, which unlocks refund_intent for every participant. Use when Jupiter has no route or slippage breach makes execute_swap impossible."
+        buttonLabel="Mark Window Failed"
+        disabled={
+          !currentWindow ||
+          currentWindow.status !== 1 ||
+          !wallet.publicKey ||
+          !pool ||
+          pool.authority.toBase58() !== wallet.publicKey?.toBase58()
+        }
+        disabledReason={
+          !wallet.publicKey
+            ? "Connect wallet"
+            : !currentWindow
+              ? "No active window"
+              : currentWindow.status !== 1
+                ? `Window not Aggregating (status: ${windowStatusLabel})`
+                : pool && pool.authority.toBase58() !== wallet.publicKey?.toBase58()
+                  ? "Only pool authority can call this"
+                  : undefined
+        }
+        submitting={busyAction === "fail"}
+        onClick={handleMarkWindowFailed}
       />
 
       <section

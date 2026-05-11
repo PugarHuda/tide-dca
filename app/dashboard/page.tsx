@@ -19,6 +19,7 @@ import {
 import {
   submitClaimAllocation,
   submitCommitIntent,
+  submitRefundIntent,
 } from "@/lib/tide-actions";
 import { useToast } from "@/components/toast";
 import { useCountUp } from "@/lib/hooks/use-count-up";
@@ -42,6 +43,7 @@ export default function DashboardPage() {
   const { intent: pendingIntent } = useUserIntent(windowPubkey);
   const [claiming, setClaiming] = useState(false);
   const [committing, setCommitting] = useState(false);
+  const [refunding, setRefunding] = useState(false);
 
   // Pre-compute the headline savings number (defaults to 0n when pool /
   // position aren't ready so the hook order stays stable across renders).
@@ -73,6 +75,24 @@ export default function DashboardPage() {
       }
     } finally {
       setClaiming(false);
+    }
+  };
+
+  const handleRefund = async () => {
+    if (!windowPubkey) return;
+    setRefunding(true);
+    try {
+      const result = await submitRefundIntent(connection, wallet, {
+        poolPda: poolPubkey,
+        windowPda: windowPubkey,
+      });
+      if (result.ok) {
+        toast.success("Refund issued", { explorerSig: result.signature });
+      } else {
+        toast.error(result.error);
+      }
+    } finally {
+      setRefunding(false);
     }
   };
 
@@ -140,6 +160,14 @@ export default function DashboardPage() {
   const pendingClaim =
     pendingIntent && currentWindow?.status === 2 && !pendingIntent.claimed
       ? pendingIntent.allocatedAmount
+      : 0n;
+  // Refund eligibility: the window has been marked Failed (status==3)
+  // and this user has an unclaimed intent on it. The exact amount comes
+  // straight from intent.amount — escrow returns the full commit, no
+  // pro-rata math like claim_allocation.
+  const pendingRefund =
+    pendingIntent && currentWindow?.status === 3 && !pendingIntent.claimed
+      ? pendingIntent.amount
       : 0n;
   const nextWindowSeconds = currentWindow
     ? Math.max(0, Number(currentWindow.endTs) - Math.floor(Date.now() / 1000))
@@ -260,6 +288,26 @@ export default function DashboardPage() {
           actionLabel="Claim"
           onAction={() => void handleClaim()}
           submitting={claiming}
+        />
+      )}
+
+      {/* Pending refund (window was marked Failed) */}
+      {pendingRefund > 0n && (
+        <ActionBanner
+          title="Refund available"
+          body={
+            <>
+              Window #{currentWindow?.windowNumber.toString()} couldn't
+              execute the swap (marked Failed). Pull your{" "}
+              <span className="mono" style={{ color: "var(--warn)" }}>
+                {formatUsdc(pendingRefund)}
+              </span>{" "}
+              commit back out of escrow.
+            </>
+          }
+          actionLabel="Refund"
+          onAction={() => void handleRefund()}
+          submitting={refunding}
         />
       )}
 

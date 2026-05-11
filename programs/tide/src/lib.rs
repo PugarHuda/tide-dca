@@ -96,4 +96,12 @@ pub mod tide {
     pub fn refund_intent(ctx: Context<RefundIntent>) -> Result<()> {
         instructions::refund_intent::handler(ctx)
     }
+
+    /// User closes their settled Intent account to reclaim rent (~0.002
+    /// SOL per intent). Only callable after `claim_allocation` or
+    /// `refund_intent` has run (intent.claimed == true) — prevents
+    /// closing fresh intents and bypassing window aggregate accounting.
+    pub fn close_intent(ctx: Context<CloseIntent>) -> Result<()> {
+        instructions::close_intent::handler(ctx)
+    }
 }

@@ -34,6 +34,7 @@ export function WindowStatusCard({
   const hours = Math.floor(remaining / 3600);
   const minutes = Math.floor((remaining % 3600) / 60);
   const seconds = remaining % 60;
+  const expired = remaining === 0;
 
   const statusInfo = {
     0: { label: "Open for commits", badge: "badge--good", live: true },
@@ -41,6 +42,22 @@ export function WindowStatusCard({
     2: { label: "Distributed", badge: "badge--accent", live: false },
     3: { label: "Failed", badge: "badge--warn", live: false },
   }[status];
+
+  // Caption above the countdown reflects what state the window is in
+  // AND what the next action is, so users don't see "Closes in 00m 00s"
+  // sitting indefinitely without context.
+  const captionLabel =
+    status === 0 && !expired
+      ? "Closes in"
+      : status === 0 && expired
+        ? "Awaiting trigger_aggregate"
+        : status === 1
+          ? "MPC compute in flight"
+          : status === 2
+            ? "Distributed — ready to claim"
+            : status === 3
+              ? "Failed — refund available"
+              : "Closed";
 
   return (
     <div className="card">
@@ -60,7 +77,7 @@ export function WindowStatusCard({
             textTransform: "uppercase",
           }}
         >
-          {status === 0 ? "Closes in" : "Closed"}
+          {captionLabel}
         </div>
         <div
           className="mono"

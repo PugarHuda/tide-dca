@@ -85,6 +85,22 @@ export function PythOracleCard() {
         </p>
       )}
 
+      {!price && !error && (
+        <div
+          className="card card--quiet"
+          style={{
+            padding: 14,
+            display: "flex",
+            flexDirection: "column",
+            gap: 8,
+          }}
+        >
+          <div className="skeleton skeleton--block" />
+          <div className="skeleton skeleton--block" style={{ width: "60%" }} />
+          <div className="skeleton skeleton--block" style={{ width: "40%" }} />
+        </div>
+      )}
+
       {price && !error && (
         <div
           className="card card--quiet"

@@ -49,7 +49,24 @@ Full lifecycle validated end-to-end on Solana **devnet**:
 | execute_swap (PDA-signed CPI) | [`2yCSusUk...`](https://explorer.solana.com/tx/2yCSusUkWNS59y1ypX38AB5c1rN7NG4DwwS5Q4G6yY91eVqcuXA5Fp9JUY2NKxN964Ldtr3QLFHyb2mD8Ji81Bu7?cluster=devnet) |
 | claim_allocation (0.01 wSOL out) | [`5DU1YMSf...`](https://explorer.solana.com/tx/5DU1YMSfPVkSEpqw1xenu6GjaBtUTK1m242DNThzURfq5MagKkSivj17LaJ82aahdk2CsppG3SH4RBZ2cZS7fmiT?cluster=devnet) |
 
-7 of 7 instructions validated. Full report: [`.research/qa-results.md`](./.research/qa-results.md).
+7 of 7 lifecycle instructions validated as pinned txs above. **Program now ships 10 instructions** after a 5-upgrade hardening cycle on submission day:
+
+| # | Instruction | Permission | Notes |
+|---|---|---|---|
+| 1 | `init_pool` | Pool authority | Audit: `min_pool_size > 0` enforced |
+| 2 | `init_window` | Permissionless | Opens new cycle |
+| 3 | `setup_dca_position` | User | Recurring config |
+| 4 | `commit_intent` | User | Audit: `amount ≤ position.amount_per_window`, `input_mint == pool.input_mint` |
+| 5 | `trigger_aggregate` | Permissionless | Window expired → status=1 |
+| 6 | `execute_swap` | Caller | Audit: Jupiter v6 program ID hardcoded |
+| 7 | `claim_allocation` | User | Audit: tightened to `status==2` only |
+| 8 | `mark_window_failed` ✨ | Pool authority | Escape hatch when swap can't run |
+| 9 | `refund_intent` ✨ | User | Pull commit back from Failed window |
+| 10 | `close_intent` ✨ | User | Reclaim ~0.002 SOL of intent rent post-settlement |
+
+Refund flow validated end-to-end on devnet ([`trigger_aggregate`](https://explorer.solana.com/tx/67fBCQyG33dc3NyXQFhpXEkxCQLEbyjrsk91AQPQUEEQBrehp1iaa8eVuciygpLhRuNB6J5BtXRewsTZnDCytkYb?cluster=devnet) → [`mark_window_failed`](https://explorer.solana.com/tx/4iNFcw2VtohZZX3MJFpbS3L6M9c8if36QXCfyWFjDsCJA3vquPm8hMrPBJJB2tLiDm1pRZTWdiw5JksRidPqn2ov?cluster=devnet) → [`refund_intent`](https://explorer.solana.com/tx/SDrdCnJ3HBHLqUAUkYmFTkMUBKjoH2BC6eSetZnpGZD2XVpiR1UJaZv5KrrH1671SQWDyudKYJnbfFZCU1Z7q5k?cluster=devnet) — wallet recovered exact `intent.amount` from escrow).
+
+Full audit-finding response: [`.research/honest-depth.md`](./.research/honest-depth.md). QA matrix: 12/12 in [`scripts/qa-sponsors.mjs`](./scripts/qa-sponsors.mjs).
 
 ## Sponsor integrations
 

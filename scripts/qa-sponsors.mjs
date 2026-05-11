@@ -438,7 +438,7 @@ async function qa9_moonpay_webhook() {
 async function qa11_new_anchor_ix() {
   section(11, "New Anchor instructions (mark_window_failed + refund_intent)");
   try {
-    const expected = ["mark_window_failed", "refund_intent"];
+    const expected = ["mark_window_failed", "refund_intent", "close_intent"];
     for (const name of expected) {
       const disc = createHash("sha256")
         .update(`global:${name}`)
@@ -452,8 +452,8 @@ async function qa11_new_anchor_ix() {
         return;
       }
     }
-    ok(`Both new instruction discriminators computed cleanly`);
-    record("QA-11", "anchor-new-ix", "PASS", "2 new ix reachable");
+    ok(`All ${expected.length} new instruction discriminators computed cleanly`);
+    record("QA-11", "anchor-new-ix", "PASS", `${expected.length} new ix reachable`);
   } catch (err) {
     fail(`new-ix check threw: ${err.message}`);
     record("QA-11", "anchor-new-ix", "FAIL", err.message);

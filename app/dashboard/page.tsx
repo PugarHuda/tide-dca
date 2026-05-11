@@ -18,6 +18,7 @@ import {
 } from "@/lib/hooks";
 import {
   submitClaimAllocation,
+  submitCloseIntent,
   submitCommitIntent,
   submitRefundIntent,
 } from "@/lib/tide-actions";
@@ -44,6 +45,7 @@ export default function DashboardPage() {
   const [claiming, setClaiming] = useState(false);
   const [committing, setCommitting] = useState(false);
   const [refunding, setRefunding] = useState(false);
+  const [closing, setClosing] = useState(false);
 
   // Pre-compute the headline savings number (defaults to 0n when pool /
   // position aren't ready so the hook order stays stable across renders).
@@ -75,6 +77,26 @@ export default function DashboardPage() {
       }
     } finally {
       setClaiming(false);
+    }
+  };
+
+  const handleCloseIntent = async () => {
+    if (!windowPubkey) return;
+    setClosing(true);
+    try {
+      const result = await submitCloseIntent(connection, wallet, {
+        poolPda: poolPubkey,
+        windowPda: windowPubkey,
+      });
+      if (result.ok) {
+        toast.success("Intent closed (rent reclaimed)", {
+          explorerSig: result.signature,
+        });
+      } else {
+        toast.error(result.error);
+      }
+    } finally {
+      setClosing(false);
     }
   };
 
@@ -169,6 +191,10 @@ export default function DashboardPage() {
     pendingIntent && currentWindow?.status === 3 && !pendingIntent.claimed
       ? pendingIntent.amount
       : 0n;
+  // Close eligibility: intent has been settled (claimed=true from either
+  // claim_allocation or refund_intent). Account is ~0.002 SOL of rent
+  // that the user can sweep back via close_intent.
+  const canCloseIntent = !!pendingIntent && pendingIntent.claimed;
   const nextWindowSeconds = currentWindow
     ? Math.max(0, Number(currentWindow.endTs) - Math.floor(Date.now() / 1000))
     : 0;
@@ -309,6 +335,40 @@ export default function DashboardPage() {
           onAction={() => void handleRefund()}
           submitting={refunding}
         />
+      )}
+
+      {/* Reclaim rent on settled intent */}
+      {canCloseIntent && (
+        <section
+          className="card card--quiet"
+          style={{
+            marginBottom: 24,
+            padding: "12px 18px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 16,
+            flexWrap: "wrap",
+          }}
+        >
+          <p className="tiny" style={{ color: "var(--text-2)", margin: 0 }}>
+            <span style={{ color: "var(--accent)", marginRight: 6 }}>✓</span>
+            Intent settled for window #
+            {currentWindow?.windowNumber.toString()}. Close the account
+            to reclaim ~0.002 SOL of rent.
+          </p>
+          <button
+            type="button"
+            className="btn btn--ghost btn--sm"
+            onClick={() => void handleCloseIntent()}
+            disabled={closing}
+          >
+            {closing ? <span className="spinner spinner--sm" /> : null}
+            <span style={{ marginLeft: closing ? 8 : 0 }}>
+              {closing ? "Closing…" : "Reclaim rent"}
+            </span>
+          </button>
+        </section>
       )}
 
       <section

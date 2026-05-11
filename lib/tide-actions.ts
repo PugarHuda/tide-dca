@@ -604,6 +604,64 @@ export async function submitMarkWindowFailed(
   }
 }
 
+// ─── User: close_intent (reclaim rent post-claim/post-refund) ─────────────
+//
+// After claim_allocation OR refund_intent has set `intent.claimed = true`,
+// the Intent account has served its purpose. Closing it via Anchor's
+// `close = owner` constraint sweeps the rent-exempt balance (~0.002 SOL)
+// back to the user. Cheap polish but compounds: a daily DCA over a year
+// would otherwise leave ~0.73 SOL stuck in stale account rents.
+
+export type CloseIntentParams = {
+  poolPda: PublicKey;
+  windowPda: PublicKey;
+};
+
+export async function submitCloseIntent(
+  connection: Connection,
+  wallet: SignerWallet,
+  params: CloseIntentParams,
+): Promise<SubmitResult> {
+  if (!wallet.publicKey) return { ok: false, error: "Wallet not connected" };
+  if (!wallet.sendTransaction)
+    return { ok: false, error: "Wallet does not support sendTransaction" };
+
+  const owner = wallet.publicKey;
+  const [intentPda] = findIntentPda(params.windowPda, owner);
+
+  const ix = new TransactionInstruction({
+    programId: TIDE_PROGRAM_ID,
+    keys: [
+      { pubkey: owner, isSigner: true, isWritable: true },
+      { pubkey: params.windowPda, isSigner: false, isWritable: false },
+      { pubkey: intentPda, isSigner: false, isWritable: true },
+    ],
+    data: discriminator("close_intent"),
+  });
+
+  const tx = new Transaction()
+    .add(ComputeBudgetProgram.setComputeUnitLimit({ units: 30_000 }))
+    .add(ix);
+
+  try {
+    const signature = await preflightAndSend(
+      connection,
+      wallet,
+      tx,
+      wallet.publicKey,
+    );
+    await connection.confirmTransaction(signature, "confirmed");
+    return {
+      ok: true,
+      signature,
+      poolPda: params.poolPda,
+      positionPda: intentPda,
+    };
+  } catch (err) {
+    return { ok: false, error: decodeAnchorError(err) };
+  }
+}
+
 // ─── Operator: trigger_aggregate ─────────────────────────────────────────────
 //
 // Permissionless. Flips current window from status 0 (Open) to status 1

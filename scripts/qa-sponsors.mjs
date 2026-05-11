@@ -37,10 +37,29 @@ const PYTH_SOL_USD_FEED = new PublicKey(
 const POOL_PDA = new PublicKey("9JRBentsBQiG4hgvsxuc2twmzf87G2PcEVRwBKQ7rcj4");
 
 // ─── Load wallet for ix building ───────────────────────────────────────────
+//
+// Local dev: reads ~/.config/solana/id.json so QA-5 (Squads ix builder)
+// derives ix data against the real authority key.
+//
+// CI / sandbox: when the keypair file is absent (GitHub Actions has no
+// ~/.config/solana/), fall back to an ephemeral keypair. None of the 13
+// QA cases actually SIGN + SEND a tx — they all read state or build ix
+// data only. So an ephemeral key has no on-chain consequence; it just
+// stands in as a valid Solana pubkey for derivations.
 function loadKeypair() {
   const p = path.join(os.homedir(), ".config", "solana", "id.json");
-  const raw = JSON.parse(fs.readFileSync(p, "utf8"));
-  return Keypair.fromSecretKey(Uint8Array.from(raw));
+  try {
+    const raw = JSON.parse(fs.readFileSync(p, "utf8"));
+    return Keypair.fromSecretKey(Uint8Array.from(raw));
+  } catch (err) {
+    if (err && err.code === "ENOENT") {
+      console.warn(
+        `[qa-sponsors] No keypair at ${p}, using ephemeral for read-only probes`,
+      );
+      return Keypair.generate();
+    }
+    throw err;
+  }
 }
 const wallet = loadKeypair();
 const owner = wallet.publicKey;

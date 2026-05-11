@@ -82,4 +82,18 @@ pub mod tide {
     pub fn claim_allocation(ctx: Context<ClaimAllocation>) -> Result<()> {
         instructions::claim_allocation::handler(ctx)
     }
+
+    /// Pool authority marks an Aggregating window as Failed when the
+    /// swap couldn't execute (Jupiter no route, slippage breach, etc).
+    /// Unlocks `refund_intent` so users can recover their committed USDC.
+    pub fn mark_window_failed(ctx: Context<MarkWindowFailed>) -> Result<()> {
+        instructions::mark_window_failed::handler(ctx)
+    }
+
+    /// User recovers their commit from a Failed window. The inverse of
+    /// `commit_intent` — pulls `intent.amount` USDC from the shared
+    /// escrow back to the user's ATA, signed by the escrow_authority PDA.
+    pub fn refund_intent(ctx: Context<RefundIntent>) -> Result<()> {
+        instructions::refund_intent::handler(ctx)
+    }
 }

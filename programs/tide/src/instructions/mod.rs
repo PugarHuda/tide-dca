@@ -3,6 +3,8 @@ pub mod commit_intent;
 pub mod execute_swap;
 pub mod init_pool;
 pub mod init_window;
+pub mod mark_window_failed;
+pub mod refund_intent;
 pub mod setup_dca_position;
 pub mod trigger_aggregate;
 
@@ -11,5 +13,7 @@ pub use commit_intent::*;
 pub use execute_swap::*;
 pub use init_pool::*;
 pub use init_window::*;
+pub use mark_window_failed::*;
+pub use refund_intent::*;
 pub use setup_dca_position::*;
 pub use trigger_aggregate::*;

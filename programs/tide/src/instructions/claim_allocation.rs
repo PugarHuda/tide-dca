@@ -75,7 +75,12 @@ pub struct ClaimAllocation<'info> {
 
 pub fn handler(ctx: Context<ClaimAllocation>) -> Result<()> {
     let window = &ctx.accounts.window;
-    require!(window.status == 2 || window.status == 3, TideError::AggregateNotReady);
+    // Only Distributed (status=2) windows allow proportional claims.
+    // Failed (status=3) windows route through `refund_intent` instead
+    // — accepting both here would silently let a refund-eligible user
+    // accidentally claim 0 tokens (allocation = amount * 0 / committed
+    // because tokens_acquired stays 0 in Failed windows).
+    require!(window.status == 2, TideError::AggregateNotReady);
 
     let intent = &mut ctx.accounts.intent;
 

@@ -75,8 +75,15 @@ pub struct Window {
     pub start_ts: i64,
     /// End timestamp (window closes for new commits).
     pub end_ts: i64,
-    /// Status: 0=Open (commits accepted), 1=Aggregating (MXE compute),
-    ///         2=Executing (swap pending), 3=Distributed (complete)
+    /// Status state machine:
+    ///   0 = Open         — commits accepted (set by `init_window`)
+    ///   1 = Aggregating  — window closed, MXE/swap-prep in flight
+    ///                      (set by `trigger_aggregate`)
+    ///   2 = Distributed  — swap executed, users may claim via
+    ///                      `claim_allocation` (set by `execute_swap`)
+    ///   3 = Failed       — swap couldn't execute (Jupiter no route,
+    ///                      slippage exceeded, etc); users may recover
+    ///                      via `refund_intent` (set by `mark_window_failed`)
     pub status: u8,
     /// Number of intents committed.
     pub intent_count: u32,

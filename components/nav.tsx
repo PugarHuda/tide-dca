@@ -2,17 +2,23 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import type { Route } from "next";
 import { usePathname } from "next/navigation";
 
 import { ConnectButton } from "./connect-button";
 import { TideMark } from "./tide-mark";
 import { CURRENT_NETWORK } from "@/lib/constants";
 
-const LINKS = [
-  { href: "/setup", label: "Setup" },
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/admin", label: "Admin" },
-] as const;
+// Cast href as Route<string> so newly-added routes (e.g. /demo) compile
+// before `next build` regenerates the full typed-routes manifest. The
+// runtime resolves these correctly via the actual app/ directory; the
+// cast just satisfies the static typed-routes check.
+const LINKS: { href: Route; label: string }[] = [
+  { href: "/demo" as Route, label: "Demo" },
+  { href: "/setup" as Route, label: "Setup" },
+  { href: "/dashboard" as Route, label: "Dashboard" },
+  { href: "/admin" as Route, label: "Admin" },
+];
 
 export function Nav() {
   const pathname = usePathname();

@@ -23,9 +23,18 @@
 /** Reflect's published USDC vault APY. Adjust when their dashboard reports. */
 export const REFLECT_USDC_APY = 0.052; // 5.2% (target — Reflect quotes vary)
 
-/** Reflect program id on Solana mainnet (read from env, falls back to TBD). */
-export const REFLECT_PROGRAM_ID =
-  process.env.NEXT_PUBLIC_REFLECT_PROGRAM_ID ?? "ReflectTBDxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
+/**
+ * Reflect program id on Solana mainnet — read from env, returns `null`
+ * when unset. Callers MUST `reflectConfigured()` first; building an
+ * instruction with `null` throws below. The previous fallback was a
+ * literal placeholder string ("ReflectTBDxxxxxxxxxxxxxxxxxxxxxxxxxxxx")
+ * which made it look like the integration was wired even when the env
+ * var was missing — a grep of the source would surface that string and
+ * raise valid eyebrows. Null fallback + handler-level throw makes the
+ * "not yet wired" state explicit instead of hidden behind a fake id.
+ */
+export const REFLECT_PROGRAM_ID: string | null =
+  process.env.NEXT_PUBLIC_REFLECT_PROGRAM_ID ?? null;
 
 /**
  * Compute estimated yield on idle escrow USDC for a single window.
@@ -139,7 +148,23 @@ export type ReflectDepositInstructions = {
 export function buildReflectDepositIx(
   params: ReflectDepositParams,
 ): ReflectDepositInstructions {
-  const programId = params.programId ?? new PublicKey(REFLECT_PROGRAM_ID);
+  // Two-step program-id resolution:
+  //   1. Explicit param wins (test override, future multi-vault support)
+  //   2. Otherwise pick up REFLECT_PROGRAM_ID from env
+  //   3. If both absent, throw — caller skipped the reflectConfigured()
+  //      gate. Surfacing the throw is intentional: a silent placeholder
+  //      would let the UI render a deposit button that always 6004's.
+  const resolvedProgramId = params.programId
+    ? params.programId
+    : REFLECT_PROGRAM_ID
+      ? new PublicKey(REFLECT_PROGRAM_ID)
+      : null;
+  if (!resolvedProgramId) {
+    throw new Error(
+      "Reflect program id not configured — set NEXT_PUBLIC_REFLECT_PROGRAM_ID or gate via reflectConfigured()",
+    );
+  }
+  const programId = resolvedProgramId;
   const rUsdcMint =
     params.rUsdcMint ?? (REFLECT_RUSDC_MINT_ENV
       ? new PublicKey(REFLECT_RUSDC_MINT_ENV)

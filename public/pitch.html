@@ -161,6 +161,77 @@
   }
   .footer .brand { color: var(--accent); letter-spacing: 2px; font-weight: 600; }
 
+  /* Top-right pacing widget — presenter rehearsal aid */
+  .timer {
+    position: absolute; top: 32px; right: 96px;
+    display: flex; flex-direction: column; align-items: flex-end;
+    gap: 4px;
+    font-family: 'JetBrains Mono', 'SF Mono', Consolas, monospace;
+    color: var(--fg-2);
+    line-height: 1;
+  }
+  .timer .duration {
+    color: var(--accent);
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.5px;
+  }
+  .timer .cumulative {
+    font-size: 11px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    opacity: 0.6;
+  }
+
+  /* Speaker notes panel — toggled with 'S' key */
+  .notes-panel {
+    position: fixed; bottom: 56px; left: 50%;
+    transform: translateX(-50%) translateY(120%);
+    width: min(900px, 90vw);
+    max-height: 60vh;
+    background: rgba(7,9,12,0.96);
+    border: 1px solid var(--accent);
+    border-radius: 16px;
+    padding: 24px 32px;
+    backdrop-filter: blur(20px);
+    box-shadow: 0 -8px 64px rgba(34,211,238,0.15);
+    z-index: 90;
+    transition: transform 240ms cubic-bezier(0.16,1,0.3,1);
+    overflow-y: auto;
+  }
+  .notes-panel.visible {
+    transform: translateX(-50%) translateY(0);
+  }
+  .notes-panel .notes-head {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .notes-panel .notes-head .label {
+    color: var(--accent);
+    font-size: 12px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    font-weight: 700;
+  }
+  .notes-panel .notes-head .hint {
+    color: var(--fg-2);
+    font-size: 11px;
+    letter-spacing: 1px;
+  }
+  .notes-panel .notes-body {
+    color: var(--fg-0);
+    font-size: 16px;
+    line-height: 1.6;
+  }
+  .notes-panel .notes-body p { color: var(--fg-0); margin: 0 0 10px; }
+  .notes-panel .notes-body em { color: var(--accent-2); font-style: italic; }
+  .notes-panel .notes-body strong { color: #fff; font-weight: 600; }
+  .notes-panel .notes-body .pause { color: var(--fg-2); font-style: italic; }
+
+  aside.notes { display: none; }
+
   /* Nav controls */
   .nav {
     position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
@@ -245,7 +316,16 @@
 <div class="deck">
 
   <!-- 1. TITLE -->
-  <section class="slide title-slide active" data-slide="1">
+  <section class="slide title-slide active" data-slide="1" data-duration="10" data-cumulative="0:10">
+    <div class="timer">
+      <span class="duration">0:10</span>
+      <span class="cumulative">0:00 → 0:10</span>
+    </div>
+    <aside class="notes">
+      <p><strong>(Look at camera. Calm energy.)</strong></p>
+      <p>"Hi, I'm Pugar. I built <strong>Tide</strong>. <em>DCA without MEV.</em> Bots blind, retail wins."</p>
+      <p class="pause">(Hold eye contact 1 second, then go.)</p>
+    </aside>
     <div class="logo">
       <svg class="tide-mark" viewBox="0 0 1024 1024">
         <defs>
@@ -268,7 +348,16 @@
   </section>
 
   <!-- 2. THE PROBLEM -->
-  <section class="slide" data-slide="2">
+  <section class="slide" data-slide="2" data-duration="25" data-cumulative="0:35">
+    <div class="timer">
+      <span class="duration">0:25</span>
+      <span class="cumulative">0:10 → 0:35</span>
+    </div>
+    <aside class="notes">
+      <p>"Solana retail loses over <strong>five million dollars a year</strong> to MEV bots front-running their DCA orders."</p>
+      <p>"Every recurring buy posted to the public mempool gets sniped. Bot detects size N, buys ahead, user fills at inflated price, bot dumps. Repeat."</p>
+      <p>"Jupiter DCA alone has crossed <em>one billion in cumulative volume</em>. Phantom plus Backpack reach five million monthly actives. The demand is massive — but every fill bleeds."</p>
+    </aside>
     <p class="kicker">The Problem</p>
     <h2>Solana retail bleeds $5M+ per year to <span style="color:var(--danger)">DCA-adjacent MEV</span>.</h2>
     <p class="lead">Every recurring buy posted to the public mempool gets sniped by a faster bot pricing in N+1. Users keep DCA-ing because they need the UX — but they pay an invisible tax on every fill.</p>
@@ -290,7 +379,17 @@
   </section>
 
   <!-- 3. THE INSIGHT -->
-  <section class="slide" data-slide="3">
+  <section class="slide" data-slide="3" data-duration="20" data-cumulative="0:55">
+    <div class="timer">
+      <span class="duration">0:20</span>
+      <span class="cumulative">0:35 → 0:55</span>
+    </div>
+    <aside class="notes">
+      <p>"Here's the key insight everyone misses."</p>
+      <p>"MEV is not a routing problem. Better DEX, higher priority fees, Jito bundles — they all <em>try to outrun</em> the bots. But the bots will always be faster."</p>
+      <p>"MEV is an <strong>intent-visibility problem</strong>. As long as your order is visible, a faster bot will price around it. The only structural fix: make the intent itself confidential until execution."</p>
+      <p>"Arcium just made on-chain MPC practical on Solana. The primitive is finally here."</p>
+    </aside>
     <p class="kicker">The Insight</p>
     <h2>MEV is an <span class="accent">intent-visibility</span> problem,<br/>not a routing problem.</h2>
     <p class="lead">Every existing fix — better DEX, priority fees, Jito bundles — treats MEV as something to outrun. But the bots are faster. They will always be faster.</p>
@@ -299,7 +398,18 @@
   </section>
 
   <!-- 4. HOW IT WORKS -->
-  <section class="slide" data-slide="4">
+  <section class="slide" data-slide="4" data-duration="30" data-cumulative="1:25">
+    <div class="timer">
+      <span class="duration">0:30</span>
+      <span class="cumulative">0:55 → 1:25</span>
+    </div>
+    <aside class="notes">
+      <p>"Tide works in four steps."</p>
+      <p>"<strong>One — Commit.</strong> Users encrypt their amount and slippage client-side using the Arcium SDK. Only the hash and USDC escrow hit the chain. Bots see nothing."</p>
+      <p>"<strong>Two — Aggregate.</strong> Arcium MPC nodes sum the encrypted intents inside a confidential compute environment. The only public output: total USDC and participant count."</p>
+      <p>"<strong>Three — Swap.</strong> One single Jupiter v6 swap via PDA-signed CPI executes the entire window atomically. Pyth oracle pins the price at window time for fairness."</p>
+      <p>"<strong>Four — Distribute.</strong> Pro-rata SOL allocations stream back. Users claim. Bots had nothing to front-run because no individual order ever existed publicly."</p>
+    </aside>
     <p class="kicker">How It Works</p>
     <h2>Encrypt → Aggregate → Swap → Distribute</h2>
     <p>Many users commit encrypted intents into a shared window. The pool aggregates inside an Arcium MXE. A single atomic Jupiter swap executes the full amount. Pro-rata allocations distribute back.</p>
@@ -329,7 +439,17 @@
   </section>
 
   <!-- 5. THE FIX (BEFORE/AFTER) -->
-  <section class="slide" data-slide="5">
+  <section class="slide" data-slide="5" data-duration="20" data-cumulative="1:45">
+    <div class="timer">
+      <span class="duration">0:20</span>
+      <span class="cumulative">1:25 → 1:45</span>
+    </div>
+    <aside class="notes">
+      <p>"Same user. Same wallet. Same DCA size. Different fills."</p>
+      <p>"On Jupiter today — left side — the intent is public, the bot reacts, the user absorbs the bleed."</p>
+      <p>"On Tide — right side — the intent is encrypted, the bot sees only the aggregate, every user fills at institutional-grade prices."</p>
+      <p>"Same UX. Privacy by default. That's the entire pitch."</p>
+    </aside>
     <p class="kicker">Before vs After</p>
     <h2>The same user. Different fills.</h2>
     <div class="compare">
@@ -358,7 +478,20 @@
   </section>
 
   <!-- 6. DEMO -->
-  <section class="slide" data-slide="6">
+  <section class="slide" data-slide="6" data-duration="30" data-cumulative="2:15">
+    <div class="timer">
+      <span class="duration">0:30</span>
+      <span class="cumulative">1:45 → 2:15</span>
+    </div>
+    <aside class="notes">
+      <p><strong>(Switch to live browser. Or describe verbally if recording from slides.)</strong></p>
+      <p>"This is live, today, at <em>tide-dca.vercel.app</em>."</p>
+      <p>"<strong>/demo</strong> — an interactive walkthrough with a happy-path versus failure-and-refund toggle. Judges can explore without connecting a wallet."</p>
+      <p>"<strong>/setup</strong> — connect Phantom, click <em>Mint 100 test USDC</em>, configure a DCA position."</p>
+      <p>"<strong>/dashboard</strong> — commit to the live 15-minute window, see your savings versus a Jupiter baseline."</p>
+      <p>"<strong>/admin</strong> — an operator console with nine live sponsor probes. Arcium, Pyth, Jupiter, Privy, Squads, Reflect, MoonPay, Raydium — each ping verifiable on demand."</p>
+      <p>"Devnet program ID is on screen, pinned in the README, with nine successful on-chain upgrades during submission day."</p>
+    </aside>
     <p class="kicker">Live Demo</p>
     <h2><span class="accent">tide-dca.vercel.app</span></h2>
     <ul class="check">
@@ -374,7 +507,16 @@
   </section>
 
   <!-- 7. SPONSORS INTEGRATED -->
-  <section class="slide" data-slide="7">
+  <section class="slide" data-slide="7" data-duration="15" data-cumulative="2:30">
+    <div class="timer">
+      <span class="duration">0:15</span>
+      <span class="cumulative">2:15 → 2:30</span>
+    </div>
+    <aside class="notes">
+      <p>"Nine sponsor surfaces — each one earns its keep."</p>
+      <p>"<strong>Arcium</strong> isn't decoration — it's the mechanism core. Without confidential aggregate, there is no Tide."</p>
+      <p>"<strong>Jupiter v6</strong> executes the atomic swap via PDA-signed CPI. <strong>Pyth</strong> pins window-time price. <strong>Privy</strong> brings non-crypto users in. Every surface is live and verifiable in <em>/admin</em>."</p>
+    </aside>
     <p class="kicker">Sponsor Integration</p>
     <h2>9 surfaces. Each one earns its keep.</h2>
     <div class="sponsor-grid">
@@ -392,7 +534,17 @@
   </section>
 
   <!-- 8. TRACTION / WHAT'S SHIPPED -->
-  <section class="slide" data-slide="8">
+  <section class="slide" data-slide="8" data-duration="25" data-cumulative="2:55">
+    <div class="timer">
+      <span class="duration">0:25</span>
+      <span class="cumulative">2:30 → 2:55</span>
+    </div>
+    <aside class="notes">
+      <p>"The product runs today. Not a mockup."</p>
+      <p>"<strong>Eleven Anchor instructions</strong> deployed on Solana devnet. <em>Nine successful on-chain program upgrades during submission day alone</em> — each one responding to real test feedback."</p>
+      <p>"<strong>Thirteen-case CI matrix</strong> green on every push. <strong>INTEGRITY dot M D</strong> publicly lists every mock and every env-gated component before any judge has to ask."</p>
+      <p>"I lead with disclosure, not polish. Trust comes from showing the seams."</p>
+    </aside>
     <p class="kicker">What's Shipped</p>
     <h2>The product runs today.</h2>
     <ul class="check">
@@ -407,7 +559,16 @@
   </section>
 
   <!-- 9. BUSINESS MODEL -->
-  <section class="slide" data-slide="9">
+  <section class="slide" data-slide="9" data-duration="15" data-cumulative="3:10">
+    <div class="timer">
+      <span class="duration">0:15</span>
+      <span class="cumulative">2:55 → 3:10</span>
+    </div>
+    <aside class="notes">
+      <p>"<strong>Five to ten basis points</strong> on every aggregate window swap. Deducted before pro-rata distribution."</p>
+      <p>"Capture even ten percent of Jupiter's DCA-shaped volume at ten bps — that's one hundred thousand to one million in annual protocol revenue from a single chain wedge."</p>
+      <p>"The mechanism generalizes: TWAP, payroll, rebalancing. DCA is just the highest-volume wedge to prove it."</p>
+    </aside>
     <p class="kicker">Business Model</p>
     <h2>5–10 bps on every aggregate swap.</h2>
     <div class="cols">
@@ -429,7 +590,16 @@
   </section>
 
   <!-- 10. ROADMAP -->
-  <section class="slide" data-slide="10">
+  <section class="slide" data-slide="10" data-duration="15" data-cumulative="3:25">
+    <div class="timer">
+      <span class="duration">0:15</span>
+      <span class="cumulative">3:10 → 3:25</span>
+    </div>
+    <aside class="notes">
+      <p>"<strong>Q2:</strong> Arcium Cohort 2 mainnet acceptance, Ottersec audit prep, ten K bootstrap liquidity."</p>
+      <p>"<strong>Q3:</strong> wallet-level integration — Phantom and Backpack embed Tide as the default <em>Recurring Buy</em> surface. Distribution flywheel."</p>
+      <p>"<strong>Q4 and beyond:</strong> institutional path via Squads multisigs, Reflect yield on idle escrow, generalize the primitive."</p>
+    </aside>
     <p class="kicker">Roadmap</p>
     <h2>From devnet to default primitive.</h2>
     <div class="timeline">
@@ -454,7 +624,16 @@
   </section>
 
   <!-- 11. TEAM -->
-  <section class="slide" data-slide="11">
+  <section class="slide" data-slide="11" data-duration="15" data-cumulative="3:40">
+    <div class="timer">
+      <span class="duration">0:15</span>
+      <span class="cumulative">3:25 → 3:40</span>
+    </div>
+    <aside class="notes">
+      <p>"<strong>Solo founder.</strong> Based in Indonesia. Wrote every line — program, frontend, integrations, demo simulator, integrity audit."</p>
+      <p>"AI is my force-multiplier, not autopilot. Every design decision, scope cut, sponsor surface choice — mine. Velocity proof: nine on-chain upgrades in a single submission day."</p>
+      <p>"And I bleed to DCA MEV personally. This fixes my problem first."</p>
+    </aside>
     <p class="kicker">Team</p>
     <h2>Solo. Lean. Honest.</h2>
     <div class="cols">
@@ -477,7 +656,19 @@
   </section>
 
   <!-- 12. CTA / CLOSE -->
-  <section class="slide cta-slide" data-slide="12">
+  <section class="slide cta-slide" data-slide="12" data-duration="20" data-cumulative="4:00">
+    <div class="timer">
+      <span class="duration">0:20</span>
+      <span class="cumulative">3:40 → 4:00</span>
+    </div>
+    <aside class="notes">
+      <p><strong>(Slow down. Look directly at camera.)</strong></p>
+      <p>"<strong>Bots blind. Retail wins.</strong>"</p>
+      <p>"Tide turns an institutional privacy primitive into a retail one — on Solana, this submission window."</p>
+      <p>"We built it. It works. Help us make it the default."</p>
+      <p class="pause">(1 second pause, smile, end.)</p>
+      <p>"Thank you."</p>
+    </aside>
     <h1>Bots blind.<br/><span class="accent">Retail wins.</span></h1>
     <p class="lead" style="max-width:800px; margin-top:32px;">Tide makes DCA private-by-default on Solana. We turned an institutional primitive into a retail one. Help us make it the default.</p>
     <div class="links">
@@ -494,35 +685,73 @@
   <button id="prev">← Prev</button>
   <span class="counter"><span id="cur">1</span> / <span id="total">12</span></span>
   <button id="next">Next →</button>
+  <button id="notes-btn">Notes (S)</button>
+</div>
+
+<div class="notes-panel" id="notes-panel">
+  <div class="notes-head">
+    <span class="label">Speaker Notes · Slide <span id="notes-slide-num">1</span> / 12</span>
+    <span class="hint">Press S to toggle · ←/→ to navigate</span>
+  </div>
+  <div class="notes-body" id="notes-body"></div>
 </div>
 
 <script>
   const slides = document.querySelectorAll('.slide');
   const total = slides.length;
   let i = 0;
+  let notesVisible = false;
 
   document.getElementById('total').textContent = total;
+
+  function renderNotes() {
+    const slide = slides[i];
+    const notesEl = slide.querySelector('aside.notes');
+    const body = document.getElementById('notes-body');
+    document.getElementById('notes-slide-num').textContent = i + 1;
+    body.replaceChildren();
+    if (notesEl) {
+      Array.from(notesEl.childNodes).forEach((child) => {
+        body.appendChild(child.cloneNode(true));
+      });
+    } else {
+      const empty = document.createElement('p');
+      empty.style.opacity = '0.5';
+      empty.textContent = 'No speaker notes for this slide.';
+      body.appendChild(empty);
+    }
+  }
 
   function show(n) {
     slides[i].classList.remove('active');
     i = (n + total) % total;
     slides[i].classList.add('active');
     document.getElementById('cur').textContent = i + 1;
+    renderNotes();
+  }
+
+  function toggleNotes() {
+    notesVisible = !notesVisible;
+    document.getElementById('notes-panel').classList.toggle('visible', notesVisible);
   }
 
   document.getElementById('next').onclick = () => show(i + 1);
   document.getElementById('prev').onclick = () => show(i - 1);
+  document.getElementById('notes-btn').onclick = toggleNotes;
 
   document.addEventListener('keydown', (e) => {
     if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') show(i + 1);
     else if (e.key === 'ArrowLeft' || e.key === 'PageUp') show(i - 1);
     else if (e.key === 'Home') show(0);
     else if (e.key === 'End') show(total - 1);
+    else if (e.key === 's' || e.key === 'S') toggleNotes();
     else if (e.key === 'f' || e.key === 'F') {
       if (document.fullscreenElement) document.exitFullscreen();
       else document.documentElement.requestFullscreen();
     }
   });
+
+  renderNotes();
 </script>
 </body>
 </html>
